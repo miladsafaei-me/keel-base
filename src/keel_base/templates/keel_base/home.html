@@ -1,0 +1,12 @@
+{% extends "keel_base/base.html" %}
+
+{% block content %}
+<main>
+  <h1>{{ brand_name|default:"Keel Site" }}</h1>
+  <p>Fresh Keel skeleton. This is the neutral base — install capabilities
+     (keel-ui, keel-cms, keel-content, keel-seo, keel-web) per BOOTSTRAP.md.</p>
+  {% if enabled_capabilities %}
+  <p>Enabled capabilities: {{ enabled_capabilities|join:", " }}</p>
+  {% endif %}
+</main>
+{% endblock %}

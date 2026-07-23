@@ -1,0 +1,15 @@
+# Keel fork dependency pins.
+#
+# The base install: this repo's keel-base package plus its `server` extra
+# (gunicorn, psycopg, whitenoise, python-dotenv, dj-database-url). Django + PyYAML
+# come transitively from keel-base's own dependencies.
+.[server]
+
+# Capabilities — referenced by version, NEVER vendored. Uncomment + pin the ones
+# this fork installs (BOOTSTRAP.md walks the picker). Each is a normal PyPI/GitHub
+# package the image installs; the core does not import them.
+#   keel-ui==0.1.0
+#   keel-seo==0.1.0
+#   keel-cms==0.1.0
+#   keel-content==0.1.0
+#   keel-web==0.1.0

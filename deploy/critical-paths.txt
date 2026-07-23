@@ -1,0 +1,8 @@
+# Critical paths the deploy refuses to ship broken (canary smoke-tests each one
+# against real prod data BEFORE cutover; any 4xx/5xx aborts with the previous image
+# still live). One path per line; # comments and blank lines ignored. Use canonical
+# no-trailing-slash forms so a 301 never masks a render error.
+#
+# A fork adds its high-traffic public pages here as it builds them.
+/
+/healthz

@@ -1,0 +1,5 @@
+# Git-ignored DATA dirs the worktree hook bridges (symlinks) into each session's
+# isolated worktree, so a session can reach local data without leaving for the
+# shared tree. One relative path per line; # comments ignored. Never list a path
+# that holds TRACKED files (the symlink would shadow them).
+backend/media

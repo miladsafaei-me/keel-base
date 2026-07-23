@@ -1,0 +1,53 @@
+# Keel capability registry — the SINGLE source of truth that renders BOTH the
+# BOOTSTRAP fork picker and the SiteProfile admin panel. keel_base.capabilities
+# reads this; the core never imports a capability package, it only probes whether
+# each is installed by module name.
+#
+# Fields:
+#   id                a stable short key (used in SiteProfile.enabled_capabilities)
+#   package           the pip/GitHub package to add to requirements.txt
+#   module            the top-level import that proves the package is installed
+#   requires          capability ids that must also be installed
+#   contracts         the host-supplied config/data contracts the capability needs
+#   install_needs_deploy  true if enabling it requires a rebuild + deploy (not just a DB flag)
+#   summary           one line for the picker/panel
+
+- id: ui
+  package: keel-ui
+  module: keel_ui
+  requires: []
+  contracts: [brand_tokens, theme_signal]
+  install_needs_deploy: true
+  summary: Component library (cp-* catalog, renderer, tokens, hero, server-render).
+
+- id: seo
+  package: keel-seo
+  module: keel_seo
+  requires: []
+  contracts: [critical_paths, landing_seed, sitemap_hooks]
+  install_needs_deploy: true
+  summary: Landing Registry, sitemap, noindex-by-default gate, critical-CSS engine.
+
+- id: cms
+  package: keel-cms
+  module: keel_cms
+  requires: [ui]
+  contracts: [business_doc, markets_catalog, landing_registry]
+  install_needs_deploy: true
+  summary: Blog/news/glossary engine — shared content models + render pipeline.
+
+- id: content_pipeline
+  package: keel-content
+  module: keel_content
+  requires: [ui, cms]
+  contracts: [business_doc, content_architecture, prompts_dir, external_domains]
+  install_needs_deploy: true
+  summary: Multi-stage AI content pipeline (intake -> ContentPlan -> generator).
+
+- id: web
+  package: keel-web
+  module: keel_web
+  requires: []
+  contracts: [brand_name, nav_config]
+  install_needs_deploy: true
+  summary: Auth + admin shell + client panel + storage foundation.

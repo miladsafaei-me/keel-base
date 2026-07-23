@@ -1,0 +1,126 @@
+name: PR checks
+
+# Optional pre-deploy validation. Deploy is manual+batched (see build-image.yml),
+# so this runs ONLY if a PR into main is actually opened — reserve it for
+# large/risky batches worth gating before shipping. It catches a change that
+# breaks app start-up, leaves a model without its migration, or fails a test,
+# before that batch reaches prod. Day-to-day the active safety net is the
+# prod-deploy.sh canary, not this gate. It builds and runs the SAME image prod
+# runs (./Dockerfile) so the checks see the exact artifact that would ship.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-checks:
+    name: pr-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: keel
+          POSTGRES_USER: keel
+          POSTGRES_PASSWORD: keel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U keel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect whether app code changed
+        id: scope
+        run: |
+          set -euo pipefail
+          base="origin/${{ github.base_ref }}"
+          changed="$(git diff --name-only "$base"...HEAD)"
+          echo "Changed files:"; echo "$changed"
+          code="$(echo "$changed" | grep -vE '(^README\.md$|^docs/|^\.gitignore$|CLAUDE\.md$|BOOTSTRAP\.md$|^\.claude/)' || true)"
+          if [ -z "$code" ]; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Only docs/tooling changed — skipping app checks (job still passes)."
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.scope.outputs.code == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build app image (also validates the Dockerfile builds)
+        if: steps.scope.outputs.code == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: keel-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Django system check
+        if: steps.scope.outputs.code == 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -e DJANGO_DEBUG=1 \
+            -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e POSTGRES_HOST=127.0.0.1 -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB=keel -e POSTGRES_USER=keel -e POSTGRES_PASSWORD=keel \
+            --entrypoint "" keel-web:ci \
+            python manage.py check
+
+      - name: Deploy check (production config, error-level only)
+        if: steps.scope.outputs.code == 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -e DJANGO_DEBUG=0 \
+            -e DJANGO_SECRET_KEY=ci-only-throwaway-secret-key-not-used-to-serve-traffic-0123456789 \
+            -e DJANGO_ALLOWED_HOSTS=example.com \
+            -e POSTGRES_HOST=127.0.0.1 -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB=keel -e POSTGRES_USER=keel -e POSTGRES_PASSWORD=keel \
+            --entrypoint "" keel-web:ci \
+            python manage.py check --deploy --fail-level ERROR
+
+      - name: Migrations are in sync with models
+        if: steps.scope.outputs.code == 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -e DJANGO_DEBUG=1 \
+            -e POSTGRES_HOST=127.0.0.1 -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB=keel -e POSTGRES_USER=keel -e POSTGRES_PASSWORD=keel \
+            --entrypoint "" keel-web:ci \
+            python manage.py makemigrations --check --dry-run
+
+      - name: Migrate + run test suite
+        if: steps.scope.outputs.code == 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -e DJANGO_DEBUG=1 \
+            -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e POSTGRES_HOST=127.0.0.1 -e POSTGRES_PORT=5432 \
+            -e POSTGRES_DB=keel -e POSTGRES_USER=keel -e POSTGRES_PASSWORD=keel \
+            --entrypoint "" keel-web:ci \
+            sh -c "python manage.py migrate --noinput && python manage.py test --noinput --verbosity 2"

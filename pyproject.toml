@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "keel-base"
+version = "0.1.0"
+description = "Keel Base — fresh neutral Django skeleton: settings-merge contract, collision-safe namespacing, SiteProfile, and the shared podman/CI/canary-deploy/worktree infra every Keel fork inherits."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Milad Safaei" }]
+license = { text = "UNLICENSED" }
+keywords = ["django", "keel", "scaffold", "skeleton", "podman"]
+dependencies = [
+    "Django>=4.2",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Serving/runtime deps a deployed fork needs; kept optional so importing the
+# settings contract does not force them on a library consumer.
+server = [
+    "gunicorn>=21.0",
+    "psycopg[binary]>=3.1",
+    "whitenoise>=6.0",
+    "python-dotenv>=1.0",
+    "dj-database-url>=2.1",
+]
+dev = [
+    "build>=1.0",
+    "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/miladsafaei-me/keel-base"
+
+[tool.hatch.build.targets.wheel]
+# Templates live inside src/keel_base/, so hatchling ships them as package data
+# automatically — no force-include needed (that would double-add and fail the build).
+packages = ["src/keel_base"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]

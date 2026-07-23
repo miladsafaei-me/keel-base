@@ -1,0 +1,80 @@
+# Keel base — PRODUCTION stack (blue-green web tier).
+#
+# web (8006) + web-blue (8007) run the SAME image on different host ports so nginx
+# can flip between them during a deploy with no downtime (deploy/prod-deploy.sh
+# recreates them sequentially behind the canary gate). Rename the stack by setting
+# PROJECT_SLUG (and matching `name:` below) — keep them equal so the network
+# (${PROJECT_SLUG}_default) and volumes (${PROJECT_SLUG}_media) that prod-deploy.sh
+# references resolve.
+#
+# IMAGE_REF is the built image (ghcr.io/OWNER/REPO-web:latest) — a Bucket-3 blank
+# set in deploy/deploy.env. Every service: restart policy + `:z` on bind mounts.
+
+name: keel
+
+x-web-base: &web-base
+  restart: unless-stopped
+  image: ${IMAGE_REF:-ghcr.io/OWNER/keel-web:latest}
+  command: gunicorn -c gunicorn.conf.py config.wsgi:application
+  env_file: .env
+  volumes:
+    - media:/app/backend/media:z
+  environment:
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+    REDIS_URL: redis://redis:6379/0
+    DJANGO_BEHIND_PROXY: "1"
+    # Set by deploy/prod-deploy.sh from the git short SHA so every release
+    # auto-invalidates @cache_page-cached views (settings reads RELEASE_VERSION
+    # into CACHE_VERSION). "dev" locally.
+    RELEASE_VERSION: ${RELEASE_VERSION:-dev}
+    # migrate ran via a deploy oneshot before these are recreated — skip it here to
+    # shorten the gunicorn-bind window during blue-green recreate. collectstatic
+    # still runs (STATIC_ROOT is in the writable layer, not a volume).
+    ENTRYPOINT_BOOTSTRAP: skip
+  depends_on:
+    db: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  db:
+    restart: unless-stopped
+    image: docker.io/library/postgres:16-alpine
+    container_name: ${PROJECT_SLUG:-keel}-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keel}
+      POSTGRES_USER: ${POSTGRES_USER:-keel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required in .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    restart: unless-stopped
+    image: docker.io/library/redis:7-alpine
+    container_name: ${PROJECT_SLUG:-keel}-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    <<: *web-base
+    container_name: ${PROJECT_SLUG:-keel}-web
+    ports:
+      - "127.0.0.1:8006:8000"
+
+  web-blue:
+    <<: *web-base
+    container_name: ${PROJECT_SLUG:-keel}-web-blue
+    ports:
+      - "127.0.0.1:8007:8000"
+
+volumes:
+  db:
+  media:

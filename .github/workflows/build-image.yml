@@ -1,0 +1,83 @@
+name: Build & push web image
+
+on:
+  # Deploy is MANUAL and BATCHED — pushing to main does NOT build or deploy.
+  # Work accumulates on main undeployed; a human ships it by running this
+  # workflow when a batch is ready: Actions tab -> "Build & push web image"
+  # -> Run workflow, or `gh workflow run "Build & push web image"`. One image
+  # build per deploy batch (not per task) keeps Actions minutes low; the deploy
+  # itself still runs the full canary-gated prod-deploy.sh.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: build-image-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          # ${repo}-web — matches IMAGE_REF in deploy/deploy.env.
+          images: ghcr.io/${{ github.repository }}-web
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=ref,event=branch
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Serialize deploys across concurrent runs: a single shared group with
+    # cancel-in-progress:false means a running deploy is NEVER killed mid-flight
+    # (no half-deployed prod). Later deploys queue; each does `git reset --hard
+    # origin/main` + pulls latest, so the final one carries every merged change.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - name: Pull new image and recreate web on prod
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          command_timeout: 10m
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            bash deploy/prod-deploy.sh

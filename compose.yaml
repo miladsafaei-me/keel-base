@@ -1,0 +1,89 @@
+# Keel base — LOCAL DEV stack (podman compose).
+#
+# Bucket-3 blanks driven from .env (see .env.example):
+#   PROJECT_SLUG   container-name prefix + volume namespace (default: keel)
+#   *_PORT         host ports (defaults chosen high to avoid clashing with other stacks)
+# Rename the stack by setting PROJECT_SLUG + COMPOSE_PROJECT_NAME in .env — no
+# structural edits needed.
+#
+# Rules honored on EVERY service: `restart: unless-stopped` (so the user
+# podman-restart unit brings it back after reboot) and `:z` on EVERY host bind
+# mount (so SELinux Enforcing does not block the rootless container).
+
+name: keel
+
+services:
+  db:
+    restart: unless-stopped
+    image: docker.io/library/postgres:16-alpine
+    container_name: ${PROJECT_SLUG:-keel}-db
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keel}
+      POSTGRES_USER: ${POSTGRES_USER:-keel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keel}
+    volumes:
+      - ./.compose/postgres:/var/lib/postgresql/data:Z,U
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    restart: unless-stopped
+    image: docker.io/library/redis:7-alpine
+    container_name: ${PROJECT_SLUG:-keel}-redis
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  adminer:
+    restart: unless-stopped
+    image: docker.io/library/adminer:4
+    container_name: ${PROJECT_SLUG:-keel}-adminer
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8005}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DEFAULT_DRIVER: pgsql
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    restart: unless-stopped
+    build: .
+    container_name: ${PROJECT_SLUG:-keel}-web
+    command: gunicorn -c gunicorn.conf.py config.wsgi:application
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    env_file: .env
+    volumes:
+      - ./backend:/app/backend:z
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web
+      DJANGO_BEHIND_PROXY: "1"
+      GUNICORN_RELOAD: "1"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  nginx:
+    restart: unless-stopped
+    image: docker.io/library/nginx:alpine
+    container_name: ${PROJECT_SLUG:-keel}-nginx
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro,z
+      - ./backend/media:/media:ro,z
+    depends_on:
+      - web

@@ -1,0 +1,29 @@
+# Prod vhost sample (system nginx, in front of the blue-green web tier). Copy to
+# deploy/nginx/site.conf and point deploy.env's NGINX_CONF_{SRC,DST} at it if you
+# want prod-deploy.sh to sync it. Terminate TLS here or at Cloudflare.
+#
+# Both backends listed with max_fails=0 so nginx never ejects a side; during a
+# blue-green recreate, a request hitting the down side fails fast and
+# proxy_next_upstream silently re-routes to the live sibling — no user-visible 502.
+
+upstream keel_web {
+    server 127.0.0.1:8006 max_fails=0;
+    server 127.0.0.1:8007 max_fails=0;
+}
+
+server {
+    listen 80;
+    server_name example.com;
+
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://keel_web;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 1200s;
+    }
+}
