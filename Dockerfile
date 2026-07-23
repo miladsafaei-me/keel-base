@@ -23,6 +23,13 @@ COPY src/ ./src/
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# The capability registry lives at the repo root, not inside the package. Copy it
+# to /app so keel_base.capabilities.load_registry() (which searches upward from the
+# gunicorn WORKDIR /app/backend) resolves it at runtime — otherwise the catalog is
+# empty and the admin "enabled-but-not-installed" flag can't work. Copied after the
+# pip layer so editing it never busts the dependency cache.
+COPY keel-capabilities.yml ./
+
 COPY backend/ ./backend/
 
 WORKDIR /app/backend

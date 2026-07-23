@@ -38,8 +38,14 @@ def _registry_path() -> Path | None:
     if override:
         p = Path(override)
         return p if p.is_file() else None
+    # Search from the working dir up to the filesystem root, then from the package
+    # file up. In dev the package lives in the repo tree so ``here.parents`` reaches
+    # the repo-root yml; once pip-installed (site-packages) ``here.parents`` no longer
+    # reaches the app, so ``cwd``'s parents (e.g. /app/backend -> /app) must be walked
+    # to find the yml the image copies to /app.
     here = Path(__file__).resolve()
-    for parent in [Path.cwd(), *here.parents]:
+    cwd = Path.cwd()
+    for parent in [cwd, *cwd.parents, *here.parents]:
         candidate = parent / "keel-capabilities.yml"
         if candidate.is_file():
             return candidate
