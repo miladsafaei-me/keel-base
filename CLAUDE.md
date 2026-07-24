@@ -14,6 +14,24 @@ architecture, visualization) is maintained canonically in the **`keel-kit`** plu
 `methodology/` docs. When a *generic* rule needs to change, change it upstream in
 keel-kit, not here. This file only records what is specific to the base skeleton.
 
+## Consuming a capability — update upstream, never fork it
+
+A fork consumes each `keel-*` capability **by version**: linked in dev (a
+`compose.yaml` bind-mount of the sibling `~/www/keel-*/src`) and pinned in the image
+(`requirements.txt` `@vX.Y.Z`). The fork holds **no copy** of a capability's source —
+only config (`KEEL_*` settings), thin re-exports, and its own host layers. There is
+nothing here to diverge, and there must be exactly one source: **never reproduce a
+capability's behaviour by editing the fork.** If you want to change how a consumed
+capability *works*, that edit belongs in the package.
+
+To change a consumed capability's behaviour: edit the **package repo**
+(`~/www/keel-*`); bump + release it (`~/www/keel-kit/scripts/keel-release.sh <ver>` —
+CI's version-guard fails any `src/` change shipped without a bump); then **re-pin**
+the new `@vX.Y.Z` in this fork's `requirements.txt`. `keel_pin_check.py` reports pins
+that have fallen behind — wire it into this fork's weekly Keel-drift audit. Full
+rule: keel-kit `methodology/versioning-and-release.md`; deciding *what* is generic
+vs fork-specific in the first place: keel-kit `methodology/keel-first-and-drift.md`.
+
 ## The core invariant — do not break
 
 **The base core imports NO optional capability.** `apply_base_defaults` wires only
