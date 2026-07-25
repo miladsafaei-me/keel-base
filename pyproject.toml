@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "keel-base"
-version = "0.2.0"
+version = "0.2.1"
 description = "Keel Base — fresh neutral Django skeleton: settings-merge contract, collision-safe namespacing, SiteProfile, and the shared podman/CI/canary-deploy/worktree infra every Keel fork inherits."
 readme = "README.md"
 requires-python = ">=3.10"
