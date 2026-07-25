@@ -7,47 +7,93 @@
 #   id                a stable short key (used in SiteProfile.enabled_capabilities)
 #   package           the pip/GitHub package to add to requirements.txt
 #   module            the top-level import that proves the package is installed
-#   requires          capability ids that must also be installed
+#   app               the Django app label a fork adds to INSTALLED_APPS
+#   requires          capability ids that must also be installed (resolved transitively)
 #   contracts         the host-supplied config/data contracts the capability needs
+#   context_processors  template context processors the fork appends (order-preserving)
+#   settings_stub     the KEEL_* settings block a fork drops in config/settings.py
 #   install_needs_deploy  true if enabling it requires a rebuild + deploy (not just a DB flag)
 #   summary           one line for the picker/panel
 
 - id: ui
   package: keel-ui
   module: keel_ui
+  app: keel_ui
   requires: []
   contracts: [brand_tokens, theme_signal]
+  context_processors: []
+  settings_stub: |
+    # keel-ui (the cp-* component library). The component registry ships inside
+    # the package, so no KEEL_UI_COMPONENTS_ROOT is set.
+    KEEL_UI = {
+        "risk_warning_url": "/risk-warning",
+        "enabled_packs": ["core"],
+    }
   install_needs_deploy: true
   summary: Component library (cp-* catalog, renderer, tokens, hero, server-render).
 
 - id: seo
   package: keel-seo
   module: keel_seo
+  app: keel_seo
   requires: []
   contracts: [critical_paths, landing_seed, sitemap_hooks]
+  context_processors: [keel_seo.context_processors.landing]
+  settings_stub: |
+    # keel-seo (Landing registry + sitemap + noindex-by-default gate). Greenfield
+    # by default: the initial migration creates keel_seo_landing. Set
+    # "adopt_existing": True only to adopt a host's pre-existing landing table.
+    KEEL_SEO = {
+        "cache_ttl": 300,
+    }
   install_needs_deploy: true
   summary: Landing Registry, sitemap, noindex-by-default gate, critical-CSS engine.
 
 - id: cms
   package: keel-cms
   module: keel_cms
-  requires: [ui]
+  app: keel_cms
+  requires: [ui, seo]
   contracts: [business_doc, markets_catalog, landing_registry]
+  context_processors: []
+  settings_stub: |
+    # keel-cms (blog / news / glossary engine). Greenfield by default: a plain
+    # migrate creates the blog_*/news_* tables. Set KEEL_CMS_ADOPT_EXISTING=True
+    # only to adopt a host's pre-existing tables. TopicCluster.conversion_landing
+    # targets the swappable landing model below (keel-seo provides the default).
+    # The public presentation layer (blog/news/glossary views + the keel_cms URL
+    # namespace) is supplied by the host, or via keel_cms.contrib (opt-in).
+    KEEL_CMS_LANDING_MODEL = "keel_seo.Landing"
+    KEEL_CMS = {
+        "site_name": "",
+        "glossary_title_suffix": "",
+    }
   install_needs_deploy: true
   summary: Blog/news/glossary engine — shared content models + render pipeline.
 
 - id: content_pipeline
   package: keel-content
   module: keel_content
+  app: keel_content
   requires: [ui, cms]
   contracts: [business_doc, content_architecture, prompts_dir, external_domains]
+  context_processors: []
+  settings_stub: |
+    # keel-content (multi-stage AI content pipeline). Configure its intake sources,
+    # prompt directory, and external-domain policy per the package README.
+    KEEL_CONTENT = {}
   install_needs_deploy: true
   summary: Multi-stage AI content pipeline (intake -> ContentPlan -> generator).
 
 - id: web
   package: keel-web
   module: keel_web
+  app: keel_web
   requires: []
   contracts: [brand_name, nav_config]
+  context_processors: []
+  settings_stub: |
+    # keel-web (auth + admin shell + client panel + storage foundation).
+    KEEL_WEB = {}
   install_needs_deploy: true
   summary: Auth + admin shell + client panel + storage foundation.

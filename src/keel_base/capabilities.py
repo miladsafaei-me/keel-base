@@ -83,3 +83,85 @@ def catalog_ids() -> list[str]:
 
 def installed_ids() -> list[str]:
     return [cid for cid in catalog_ids() if is_installed(cid)]
+
+
+def _by_id() -> dict[str, dict]:
+    return {c["id"]: c for c in load_registry()}
+
+
+def resolve_requires(selected: list[str]) -> list[str]:
+    """Expand ``selected`` capability ids to their transitive ``requires`` closure,
+    returned in dependency-first install order (a required capability always
+    precedes the one that needs it).
+
+    So ``resolve_requires(["cms"])`` returns ``["ui", "seo", "cms"]`` — cms
+    requires ui and seo, and both must be installed and wired before it. Unknown
+    ids are dropped (they cannot be wired). A ``requires`` cycle is broken
+    defensively rather than looping forever.
+    """
+    registry = _by_id()
+    ordered: list[str] = []
+    visiting: set[str] = set()
+
+    def visit(cid: str) -> None:
+        if cid in ordered or cid not in registry:
+            return
+        if cid in visiting:  # defensive: a requires cycle — stop descending
+            return
+        visiting.add(cid)
+        for dep in registry[cid].get("requires") or []:
+            visit(dep)
+        visiting.discard(cid)
+        if cid not in ordered:
+            ordered.append(cid)
+
+    for cid in selected:
+        visit(cid)
+    return ordered
+
+
+def wiring_for(selected: list[str]) -> dict:
+    """Compute the concrete fork wiring for ``selected`` (and their transitive
+    requires): the pip pins, INSTALLED_APPS additions, context processors, and
+    KEEL_* settings stubs, in dependency-first order.
+
+    Returned dict keys:
+      * ``capabilities``       ordered capability ids (the resolved closure)
+      * ``packages``           pip package names to pin in requirements.txt
+      * ``installed_apps``     Django app labels to append to INSTALLED_APPS
+      * ``context_processors`` template context processors to append
+      * ``settings_stubs``     list of {id, stub} settings blocks
+      * ``contracts``          the union of host-supplied contracts to fulfil
+
+    The generator turns this into the actual settings.py / requirements.txt edits;
+    keeping the computation here keeps the registry the single source of truth.
+    """
+    registry = _by_id()
+    ordered = resolve_requires(selected)
+    packages: list[str] = []
+    apps: list[str] = []
+    context_processors: list[str] = []
+    settings_stubs: list[dict] = []
+    contracts: list[str] = []
+    for cid in ordered:
+        cap = registry[cid]
+        if cap.get("package"):
+            packages.append(cap["package"])
+        if cap.get("app"):
+            apps.append(cap["app"])
+        for cp in cap.get("context_processors") or []:
+            if cp not in context_processors:
+                context_processors.append(cp)
+        if cap.get("settings_stub"):
+            settings_stubs.append({"id": cid, "stub": cap["settings_stub"].rstrip("\n")})
+        for contract in cap.get("contracts") or []:
+            if contract not in contracts:
+                contracts.append(contract)
+    return {
+        "capabilities": ordered,
+        "packages": packages,
+        "installed_apps": apps,
+        "context_processors": context_processors,
+        "settings_stubs": settings_stubs,
+        "contracts": contracts,
+    }

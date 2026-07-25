@@ -12,7 +12,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
+# `git` is required at build time: a fork pins capabilities as `keel-* @ git+https://…`
+# and `pip install` shells out to git to fetch them. libpq5 is the Postgres client lib.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
