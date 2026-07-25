@@ -132,6 +132,15 @@ def wiring_for(selected: list[str]) -> dict:
       * ``context_processors`` template context processors to append
       * ``settings_stubs``     list of {id, stub} settings blocks
       * ``contracts``          the union of host-supplied contracts to fulfil
+      * ``admin_os``           True if the closure includes an admin-os capability
+                               (cms) whose staff panel is the fork's only admin surface
+      * ``collectstatic_ignore``  a collectstatic ``--ignore`` glob the admin-os
+                               capability needs (keel-web's tailwind source dir), or None
+
+    A capability may carry an ``admin_os`` block in the registry (cms does): it
+    "pulls" extra capabilities appended AFTER it (so its own template shadows win
+    resolution), contributes admin-os apps + a settings stub, and flips ``admin_os``
+    so the generator writes the admin-os URLconf / compose mounts / entrypoint.
 
     The generator turns this into the actual settings.py / requirements.txt edits;
     keeping the computation here keeps the registry the single source of truth.
@@ -157,6 +166,35 @@ def wiring_for(selected: list[str]) -> dict:
         for contract in cap.get("contracts") or []:
             if contract not in contracts:
                 contracts.append(contract)
+
+    # Admin-os composition (cms): a fork with an admin-os capability is authored
+    # through that capability's staff panel. It pulls extra capabilities (keel-web)
+    # for pins, appends their apps AFTER the admin-os capability's own app (so its
+    # template shadows win), and appends an admin-os settings stub. Guarded so a
+    # non-admin-os fork is untouched.
+    admin_os = False
+    collectstatic_ignore = None
+    for cid in list(ordered):
+        ao = registry[cid].get("admin_os")
+        if not ao:
+            continue
+        admin_os = True
+        for pulled in ao.get("pulls") or []:
+            if pulled in registry and pulled not in ordered:
+                ordered.append(pulled)
+                pkg = registry[pulled].get("package")
+                if pkg and pkg not in packages:
+                    packages.append(pkg)
+        for a in ao.get("apps") or []:
+            if a not in apps:
+                apps.append(a)
+        if ao.get("settings_stub"):
+            settings_stubs.append(
+                {"id": f"{cid}_admin_os", "stub": ao["settings_stub"].rstrip("\n")}
+            )
+        if ao.get("collectstatic_ignore"):
+            collectstatic_ignore = ao["collectstatic_ignore"]
+
     return {
         "capabilities": ordered,
         "packages": packages,
@@ -164,4 +202,6 @@ def wiring_for(selected: list[str]) -> dict:
         "context_processors": context_processors,
         "settings_stubs": settings_stubs,
         "contracts": contracts,
+        "admin_os": admin_os,
+        "collectstatic_ignore": collectstatic_ignore,
     }
