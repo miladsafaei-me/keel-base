@@ -26,6 +26,19 @@ COPY src/ ./src/
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Optional browser stack for keel-crawler[browser] (crawl4ai + Playwright anti-bot
+# crawling), implemented ONCE here so every fork can use it instead of wiring its own
+# Playwright base image. A fork that needs browser crawling: (1) pins
+# `keel-crawler[browser]` in requirements.txt (brings crawl4ai + playwright + lxml),
+# and (2) builds with `--build-arg KEEL_BROWSER=1` — which installs the Chromium binary
+# and its system libraries here. Default 0 keeps CMS-only / signals-only forks slim:
+# the RUN is a no-op and Playwright's Python deps never arrive unless the fork pins the
+# extra. The GitHub Actions build passes this arg (see .github/workflows).
+ARG KEEL_BROWSER=0
+RUN if [ "$KEEL_BROWSER" = "1" ]; then \
+        python -m playwright install --with-deps chromium; \
+    fi
+
 # The capability registry lives at the repo root, not inside the package. Copy it
 # to /app so keel_base.capabilities.load_registry() (which searches upward from the
 # gunicorn WORKDIR /app/backend) resolves it at runtime — otherwise the catalog is
