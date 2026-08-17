@@ -5,6 +5,10 @@ projects fork from. This repo is *the base itself*, not a project that uses it.
 Treat it like a library + template: stable labels, no business logic from any
 particular consumer, every project-specific value expressed as a Bucket-3 blank.
 
+## Task tracking
+
+Remaining and follow-up work for this project is tracked in [TODO.md](TODO.md), not in chat memory. Every pending task — priority, prerequisites/dependencies, enough context to resume cold — goes there before starting new work; remove a task from TODO.md the moment it's done.
+
 ## Keel platform — inherited methodology
 
 keel-base is part of the **Keel** platform. The generic, cross-project methodology
