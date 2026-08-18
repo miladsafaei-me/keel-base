@@ -99,14 +99,20 @@
   module: keel_content
   app: keel_content
   requires: [ui, cms]
-  contracts: [business_doc, content_architecture, prompts_dir, external_domains]
+  contracts: [business_doc, content_architecture, prompts_dir, external_domains, intent_registry, publisher_adapter]
   context_processors: []
   settings_stub: |
-    # keel-content (multi-stage AI content pipeline). Configure its intake sources,
-    # prompt directory, and external-domain policy per the package README.
-    KEEL_CONTENT = {}
+    # keel-content (multi-stage AI content pipeline: intake -> ContentPlan ->
+    # intent gate -> generator). The package ships no default adapter and no
+    # concrete external-domain policy — a fork must fill both before generation
+    # can run. See keel-content/README.md, "Consume it (host wiring)", for the
+    # full contract and the reference adapter to copy.
+    KEEL_CONTENT = {
+        # "adapter": "content_pipeline.keel_adapter",  # dotted MODULE path (not a class) exposing the ContentPublisher callables: the one seam allowed to touch this fork's CMS models
+        # "external_domains": [],  # extra fast-lane hosts for the further-reading gate, on top of the package's finance-default set
+    }
   install_needs_deploy: true
-  summary: Multi-stage AI content pipeline (intake -> ContentPlan -> generator).
+  summary: Multi-stage AI content pipeline (intake -> ContentPlan -> intent gate -> generator).
 
 - id: web
   package: keel-web
