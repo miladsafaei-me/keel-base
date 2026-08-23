@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+# Per-session git worktree isolation + serialized deploys for every project in
+# this workspace. See README.md next to this script.
+#
+#   wt [<project>]        print (creating if needed) this session's worktree
+#   wt ls                 this session's worktrees and sibling sessions' WIP
+#   wt status <project>   detail for one project
+#   wt ship <project>     rebase onto origin/main, push to main, sync local
+#   wt deploy <project>   locked deploy: one build at a time across sessions
+#   wt off|on <project>   toggle isolation for a project (.no-worktree)
+#   wt sweep              collect shipped/empty worktrees now
+
+set -u
+. "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/lib.sh"
+
+die() { echo "wt: $*" >&2; exit 1; }
+
+need_sid() {
+  SID="$(keel_wt_sid)" || die "no CLAUDE_CODE_SESSION_ID in the environment; run this from a Claude Code session."
+}
+
+need_repo() {
+  local arg="${1:-}"
+  if [ -z "$arg" ]; then
+    REPO="$(keel_wt_resolve_repo "$PWD")" || REPO=""
+    [ -n "$REPO" ] || die "not inside a project; pass a project name (wt <project>)."
+  else
+    REPO="$(keel_wt_resolve_repo "$arg")" || REPO=""
+    [ -n "$REPO" ] || die "no git project named '$arg' under $KEEL_WT_WORKSPACE."
+  fi
+  PROJ="$(basename "$REPO")"
+  keel_wt_load_conf "$REPO"
+}
+
+cmd_path() {
+  need_sid; need_repo "${1:-}"
+  if [ -f "$REPO/.no-worktree" ]; then
+    echo "$REPO"
+    echo "wt: $PROJ is opted out of isolation (.no-worktree); this is the SHARED tree." >&2
+    return 0
+  fi
+  local wt rc
+  wt="$(keel_wt_ensure "$REPO" "$SID" fetch)"; rc=$?
+  [ $rc -eq 0 ] && [ -n "$wt" ] || die "could not create a worktree for $PROJ."
+  echo "$wt"
+  keel_wt_rules "$REPO" "$wt" "$SID" >&2
+}
+
+# Compact per-project view: this session's worktree plus every sibling session
+# holding work, so a deploy never silently leaves someone's commits behind.
+report_project() {
+  local repo="$1" proj wt d b ahead dirty mine
+  proj="$(basename "$repo")"
+  keel_wt_load_conf "$repo"
+  wt="$(keel_wt_path "$repo" "$SID")"
+  local lines="" any=0
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    case "$d" in
+      "$KEEL_WT_ROOT"/*|"$KEEL_WT_WORKSPACE"/.*-worktrees/*) ;;
+      *) continue ;;
+    esac
+    [ -d "$d" ] || continue
+    any=1
+    b="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    ahead="$(git -C "$d" rev-list --count "origin/$BASE_BRANCH..HEAD" 2>/dev/null || echo '?')"
+    dirty="$(git -C "$d" status --porcelain 2>/dev/null | wc -l)"
+    mine="   "
+    [ "$d" = "$wt" ] && mine=" * "
+    lines+="$(printf '%s%-44s %-26s +%-4s ~%s' "$mine" "${d#$KEEL_WT_WORKSPACE/}" "$b" "$ahead" "$dirty")"$'\n'
+  done < <(keel_wt_list_secondary "$repo")
+  [ "$any" = "1" ] || return 0
+  echo "$proj"
+  printf '%s' "$lines"
+}
+
+cmd_ls() {
+  need_sid
+  echo "session $SID   workspace $KEEL_WT_WORKSPACE"
+  echo "  ( * = this session   +N = commits not yet on main   ~N = uncommitted files )"
+  local repo
+  for repo in "$KEEL_WT_WORKSPACE"/*/; do
+    repo="${repo%/}"
+    [ -e "$repo/.git" ] || continue
+    report_project "$repo"
+  done
+}
+
+cmd_status() {
+  need_sid; need_repo "${1:-}"
+  echo "project      $PROJ"
+  echo "shared tree  $REPO   ($(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null), $(git -C "$REPO" status --porcelain 2>/dev/null | wc -l) uncommitted)"
+  [ -f "$REPO/.no-worktree" ] && echo "isolation    OFF (.no-worktree present)"
+  echo "deploy wf    ${DEPLOY_WORKFLOW:-none detected}"
+  local claim="$KEEL_WT_LOCKS/deploy-$PROJ.claim"
+  [ -f "$claim" ] && echo "deploy claim $(cat "$claim")"
+  report_project "$REPO"
+}
+
+cmd_ship() {
+  local sync=1
+  [ "${1:-}" = "--no-sync" ] && { sync=0; shift; }
+  need_sid; need_repo "${1:-}"
+  [ "${2:-}" = "--no-sync" ] && sync=0
+  local wt; wt="$(keel_wt_path "$REPO" "$SID")"
+  [ -d "$wt" ] || die "this session has no worktree for $PROJ (nothing to ship)."
+  [ -z "$(git -C "$wt" status --porcelain)" ] || die "worktree has uncommitted changes; commit them first (stage by name).
+  git -C $wt status --short"
+
+  exec 7>"$KEEL_WT_LOCKS/ship-$PROJ.lock"
+  flock -w 180 7 || die "another session is shipping $PROJ; try again shortly."
+
+  git -C "$wt" fetch -q origin "$BASE_BRANCH" || die "fetch failed."
+  local ahead; ahead="$(git -C "$wt" rev-list --count "origin/$BASE_BRANCH..HEAD")"
+  if [ "$ahead" = "0" ]; then
+    echo "wt: nothing to ship; $PROJ worktree has no commits beyond origin/$BASE_BRANCH."
+    return 0
+  fi
+  if ! git -C "$wt" rebase "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+    git -C "$wt" rebase --abort >/dev/null 2>&1
+    die "rebase onto origin/$BASE_BRANCH conflicts. Resolve by hand:
+  git -C $wt rebase origin/$BASE_BRANCH"
+  fi
+  git -C "$wt" push -q origin "HEAD:$BASE_BRANCH" || die "push rejected; a sibling landed first. Re-run: wt ship $PROJ"
+  local sha; sha="$(git -C "$wt" rev-parse --short HEAD)"
+  echo "wt: $PROJ shipped $ahead commit(s) to origin/$BASE_BRANCH (now at $sha). Not deployed."
+
+  if [ "$sync" = "1" ] && [ -n "$LOCAL_SYNC" ] && [ -f "$REPO/$LOCAL_SYNC" ]; then
+    echo "wt: syncing the local preview tree..."
+    bash "$REPO/$LOCAL_SYNC" 2>&1 | sed 's/^/    /'
+  fi
+}
+
+cmd_deploy() {
+  local watch=1
+  [ "${1:-}" = "--no-watch" ] && { watch=0; shift; }
+  need_sid; need_repo "${1:-}"
+  [ -n "$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy workflow; set DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
+
+  local wt; wt="$(keel_wt_path "$REPO" "$SID")"
+  if [ -d "$wt" ]; then
+    [ -z "$(git -C "$wt" status --porcelain)" ] \
+      || die "this session's $PROJ worktree has uncommitted work. Commit + \`wt ship $PROJ\` first, or it will NOT be in this deploy."
+    git -C "$wt" fetch -q origin "$BASE_BRANCH" 2>/dev/null
+    local mine; mine="$(git -C "$wt" rev-list --count "origin/$BASE_BRANCH..HEAD" 2>/dev/null || echo 0)"
+    [ "$mine" = "0" ] || die "this session has $mine commit(s) not on origin/$BASE_BRANCH. Run: wt ship $PROJ"
+  fi
+
+  local claim="$KEEL_WT_LOCKS/deploy-$PROJ.claim"
+  exec 7>"$KEEL_WT_LOCKS/deploy-$PROJ.lock"
+  if ! flock -n 7; then
+    echo "wt: another session is deploying $PROJ${claim:+ — $(cat "$claim" 2>/dev/null)}"
+    echo "wt: waiting for it to finish (up to 45m)..."
+    flock -w 2700 7 || die "the $PROJ deploy lock is still held after 45m; check /tasks or the Actions tab."
+  fi
+
+  git -C "$REPO" fetch -q origin "$BASE_BRANCH" 2>/dev/null
+  local sha; sha="$(git -C "$REPO" rev-parse --short "origin/$BASE_BRANCH" 2>/dev/null)"
+  echo "$SID deploying origin/$BASE_BRANCH@$sha since $(date '+%F %H:%M')" > "$claim"
+  # shellcheck disable=SC2064
+  trap "rm -f '$claim'" EXIT
+
+  local d b ahead held=""
+  while IFS= read -r d; do
+    [ -n "$d" ] && [ -d "$d" ] || continue
+    case "$d" in "$KEEL_WT_ROOT"/*|"$KEEL_WT_WORKSPACE"/.*-worktrees/*) ;; *) continue ;; esac
+    [ "$d" = "$wt" ] && continue
+    ahead="$(git -C "$d" rev-list --count "origin/$BASE_BRANCH..HEAD" 2>/dev/null || echo 0)"
+    [ "$ahead" = "0" ] && continue
+    b="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    held+="    $b ($ahead commit(s), ${d#$KEEL_WT_WORKSPACE/})"$'\n'
+  done < <(keel_wt_list_secondary "$REPO")
+  if [ -n "$held" ]; then
+    echo "wt: NOT in this deploy — sibling sessions still hold unlanded work:"
+    printf '%s' "$held"
+  fi
+
+  echo "wt: deploying $PROJ at origin/$BASE_BRANCH@$sha via '$DEPLOY_WORKFLOW'"
+  local before after tries
+  before="$(cd "$REPO" && gh run list --workflow "$DEPLOY_WORKFLOW" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo 0)"
+  ( cd "$REPO" && KEEL_WT_DEPLOY_INNER=1 gh workflow run "$DEPLOY_WORKFLOW" --ref "$BASE_BRANCH" ) || die "gh workflow run failed."
+
+  after="$before"; tries=0
+  while [ "$after" = "$before" ] && [ $tries -lt 30 ]; do
+    sleep 3; tries=$((tries+1))
+    after="$(cd "$REPO" && gh run list --workflow "$DEPLOY_WORKFLOW" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "$before")"
+  done
+  if [ "$after" = "$before" ]; then
+    echo "wt: dispatched, but the run id did not appear within 90s. Check: cd $REPO && gh run list --workflow '$DEPLOY_WORKFLOW'"
+    return 0
+  fi
+  echo "wt: run $after  $(cd "$REPO" && gh run view "$after" --json url -q .url 2>/dev/null)"
+  if [ "$watch" = "1" ]; then
+    ( cd "$REPO" && gh run watch "$after" --exit-status --interval 15 ) \
+      && echo "wt: $PROJ deploy GREEN ($sha)" \
+      || die "$PROJ deploy FAILED — see the run above. The lock is released."
+  else
+    echo "wt: not watching (--no-watch); the deploy lock is released now, so a parallel deploy can still race."
+  fi
+}
+
+cmd_off() {
+  need_repo "${1:-}"
+  : > "$REPO/.no-worktree"
+  echo "wt: isolation OFF for $PROJ. This session may edit $REPO directly."
+  echo "wt: other sessions can too, so turn it back on as soon as you are done: wt on $PROJ"
+}
+
+cmd_on() {
+  need_repo "${1:-}"
+  rm -f "$REPO/.no-worktree"
+  echo "wt: isolation ON for $PROJ."
+}
+
+cmd_sweep() {
+  need_sid
+  local repo
+  for repo in "$KEEL_WT_WORKSPACE"/*/; do
+    repo="${repo%/}"
+    [ -e "$repo/.git" ] || continue
+    keel_wt_load_conf "$repo"
+    KEEL_WT_MAX_AGE_MIN="${KEEL_WT_MAX_AGE_MIN:-0}" keel_wt_sweep "$repo" "$(keel_wt_path "$repo" "$SID")"
+  done
+  echo "wt: swept shipped/empty worktrees."
+  cmd_ls
+}
+
+case "${1:-}" in
+  ls|list)   shift; cmd_ls "$@" ;;
+  status)    shift; cmd_status "$@" ;;
+  ship)      shift; cmd_ship "$@" ;;
+  deploy)    shift; cmd_deploy "$@" ;;
+  off)       shift; cmd_off "$@" ;;
+  on)        shift; cmd_on "$@" ;;
+  sweep)     shift; cmd_sweep "$@" ;;
+  -h|--help|help) sed -n '2,15p' "$(readlink -f "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//' ;;
+  *)         cmd_path "${1:-}" ;;
+esac
