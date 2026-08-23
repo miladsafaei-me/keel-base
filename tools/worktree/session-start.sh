@@ -19,7 +19,16 @@ if [ -d "$HOME/.local/bin" ] && [ ! -e "$HOME/.local/bin/wt" ]; then
   ln -sfn "$_KEEL_WT_DIR/wt" "$HOME/.local/bin/wt" 2>/dev/null
 fi
 
-cwd_repo="$(keel_wt_resolve_repo "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null)"
+cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+cwd_repo="$(keel_wt_resolve_repo "$cwd" 2>/dev/null)"
+
+# A session opened somewhere else entirely (a dotfiles repo, /tmp, another tree)
+# has nothing to isolate here: stay silent rather than explain a workspace it is
+# not in. The guards are unaffected; they key off the path being written.
+case "$(realpath -m -- "$cwd" 2>/dev/null)" in
+  "$KEEL_WT_WORKSPACE"|"$KEEL_WT_WORKSPACE"/*) ;;
+  *) exit 0 ;;
+esac
 
 # Housekeeping across every project that has session worktrees on disk. No
 # fetch here: it stays fast, and skipping it only makes cleanup more cautious.
