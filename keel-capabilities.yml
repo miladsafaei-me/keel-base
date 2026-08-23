@@ -103,14 +103,38 @@
   context_processors: []
   settings_stub: |
     # keel-content (multi-stage AI content pipeline: intake -> ContentPlan ->
-    # intent gate -> generator). The package ships no default adapter and no
-    # concrete external-domain policy — a fork must fill both before generation
-    # can run. See keel-content/README.md, "Consume it (host wiring)", for the
-    # full contract and the reference adapter to copy.
+    # intent gate -> generator). Every model and host behavior it reaches is read
+    # from here. Its OWN defaults name SignalBots' app layout ("blog.Post",
+    # "news.*", "core.Landing", "blog.markdown_convert.*"), and none of those
+    # resolve in a keel-cms fork — so the map below is filled in, not commented
+    # out. Four projects adopted this package before it was, and each one lost a
+    # run to the same wall. See keel-content/README.md, "Consume it (host
+    # wiring)", for the full contract and the reference adapter to copy.
     KEEL_CONTENT = {
+        "content_plan_model": "keel_cms.ContentPlan",
+        "post_model": "keel_cms.Post",
+        "news_post_model": "keel_cms.NewsPost",
+        "topic_cluster_model": "keel_cms.TopicCluster",
+        "author_model": "keel_cms.Author",
+        "market_model": "keel_cms.Market",
+        "tag_model": "keel_cms.Tag",
+        "landing_model": "keel_seo.Landing",
+        "prepare_storage_hook": "keel_cms.markdown_convert.prepare_pipeline_content_for_storage",
+        "markdown_html_hook": "keel_cms.markdown_convert.markdown_to_blog_html",
+        # REQUIRED, both of them — keel_cms.Post implements no get_absolute_url, so
+        # without post_url_hook every internal-link pass refuses to write rather
+        # than guess a route, and without refresh_rendered_hook the package falls
+        # through to "blog.tasks.refresh_article_rendered" and dies mid-write.
+        # "post_url_hook": "myapp.content_pipeline.keel_adapter.post_url",  # (post) -> "/blog/<slug>/"
+        # "refresh_rendered_hook": "myapp.blog.tasks.refresh_article_rendered",  # (post) -> None
         # "adapter": "content_pipeline.keel_adapter",  # dotted MODULE path (not a class) exposing the ContentPublisher callables: the one seam allowed to touch this fork's CMS models
         # "external_domains": [],  # extra fast-lane hosts for the further-reading gate, on top of the package's finance-default set
     }
+    # Swappable-model surface for keel-content's own models: read at MIGRATION
+    # time, separate from KEEL_CONTENT above, and it must agree with it or
+    # `manage.py check` fails with fields.E300/E307 against the "blog" default.
+    KEEL_CONTENT_CONTENT_PLAN_MODEL = "keel_cms.ContentPlan"
+    KEEL_CONTENT_POST_MODEL = "keel_cms.Post"
   install_needs_deploy: true
   summary: Multi-stage AI content pipeline (intake -> ContentPlan -> intent gate -> generator).
 
