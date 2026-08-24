@@ -20,6 +20,16 @@ import sys
 
 WORKSPACE = os.environ.get("KEEL_WT_WORKSPACE", "/home/milad/www")
 WRITE_OPTS = {"-o", "--output", "-O"}
+# -o is an output FILE for a handful of commands and an output FORMAT for many
+# more: journalctl -o cat, podman ps -o json, kubectl get -o yaml, ps -o pid.
+# Honouring it for every command turned each of those into a write to a file
+# named after the format, which is how `journalctl -o cat` got blocked. So the
+# option is read only when the statement actually runs a command that writes
+# with it -- an allowlist, in keeping with how narrow the rest of this is.
+OPT_WRITERS = {"curl", "wget", "ffmpeg", "gcc", "g++", "cc", "clang", "clang++",
+               "ld", "sort", "pandoc", "yt-dlp", "youtube-dl", "convert",
+               "magick", "wkhtmltopdf", "wkhtmltoimage", "objcopy", "go", "dot",
+               "zip"}
 DEST_LAST = {"cp", "mv", "install", "rsync"}
 WRITE_FIRST = {"touch", "truncate", "unlink", "rm", "mkdir", "rmdir", "ln", "patch", "dd"}
 SHELL_META = ("$", "`", "(", ")", "=", "*", "?", "{", "}")
@@ -142,6 +152,7 @@ def write_targets(command):
             words = shlex.split(statement, comments=False)
         except ValueError:
             words = statement.split()
+        opt_writer = any(os.path.basename(w) in OPT_WRITERS for w in words)
         for i, tok in enumerate(words):
             base = os.path.basename(tok)
             own = words[i + 1:]
@@ -158,7 +169,7 @@ def write_targets(command):
             elif base in DEST_LAST:
                 if len(bare) >= 2:
                     out.append(bare[-1])
-            elif tok in WRITE_OPTS and own:
+            elif tok in WRITE_OPTS and own and opt_writer:
                 out.append(own[0])
     return out
 

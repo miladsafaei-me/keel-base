@@ -56,6 +56,14 @@ check CLEAN "heredoc body quoting a blocked write"  "cat > /tmp/doc <<EOF
 echo x > $W/revenika/x
 EOF"
 
+check WRITE "curl -o into a shared tree"            "curl -s https://x/y -o $W/martiland/y.json"
+check WRITE "wget -O into a shared tree"            "wget https://x/y -O $W/revenika/y.html"
+check CLEAN "journalctl output FORMAT, not a file"  "journalctl --user -u sb-watch-main.service -o cat"
+check CLEAN "podman output format"                  "podman ps -o json"
+check CLEAN "kubectl output format"                 "kubectl get pods -o yaml"
+check CLEAN "ps column format"                      "ps -o pid,cmd"
+check CLEAN "format flag next to a shared path"     "git -C $W/revenika log -o oneline"
+
 check DEPLOY "image workflow dispatch"              "cd $W/revenika && gh workflow run build-image.yml"
 check DEPLOY "dispatch by workflow name"            "gh workflow run \"Build & push web image\""
 check CLEAN  "non-deploy workflow dispatch"         "gh workflow run version-guard.yml"
