@@ -142,19 +142,25 @@ cmd_ship() {
 # gh auth) only reports itself and lets the deploy through: the gate must not be
 # the reason a deploy is impossible.
 assert_private_if_self_hosted() {
-  local repo="$1" proj="$2" vis
-  # Read the workflows out of origin/main rather than off disk: the shared tree
-  # is only a preview and `wt ship` never checks it out, so its .github can be
-  # weeks behind the branch that actually runs.
-  git -C "$repo" grep -q -- 'self-hosted' "origin/${BASE_BRANCH:-main}" -- .github/workflows 2>/dev/null \
-    || grep -rqs -- 'self-hosted' "$repo/.github/workflows" 2>/dev/null \
-    || return 0
+  local repo="$1" proj="$2" vis runners
+  # Visibility first: it is one call, it answers for every repo, and on a private
+  # repo (the normal case) nothing else has to be asked.
   vis="$(cd "$repo" && gh repo view --json visibility -q .visibility 2>/dev/null)" || vis=""
   if [ -z "$vis" ]; then
     echo "wt: could not read $proj's GitHub visibility; the public-repo runner check did not run." >&2
     return 0
   fi
   [ "$vis" = "PUBLIC" ] || return 0
+  # Public: now ask GitHub itself whether a runner is attached, rather than
+  # trusting a local checkout. `origin/main` here can lag (the shared tree is a
+  # preview `wt ship` never checks out) and a registered runner is the fact that
+  # matters — a workflow can be pointed at it in a single commit.
+  runners="$(cd "$repo" && gh api "repos/{owner}/{repo}/actions/runners" -q '.total_count' 2>/dev/null)" || runners=""
+  if [ "${runners:-0}" = "0" ]; then
+    git -C "$repo" grep -q -- 'self-hosted' "origin/${BASE_BRANCH:-main}" -- .github/workflows 2>/dev/null \
+      || grep -rqs -- 'self-hosted' "$repo/.github/workflows" 2>/dev/null \
+      || return 0
+  fi
   cat >&2 <<EOF
 
 wt: STOP. NOT DEPLOYING $proj.
