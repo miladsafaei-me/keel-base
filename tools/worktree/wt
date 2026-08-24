@@ -98,6 +98,34 @@ cmd_status() {
   report_project "$REPO"
 }
 
+# Explain a lock we could not take. A sibling session is the ordinary answer, but
+# a leaked fd is not: podman helpers that inherited the lock hold it for as long
+# as their container runs, and no amount of trying again shortly will free it.
+lock_holder() {
+  local lock="$1" p names=""
+  for p in $(fuser "$lock" 2>/dev/null); do
+    names="$names $(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | awk '{print $1}')"
+  done
+  printf '%s' "$names"
+}
+
+lock_blocked_msg() {
+  local lock="$1" what="$2" names
+  names="$(lock_holder "$lock")"
+  case "$names" in
+    *conmon*|*rootlessport*)
+      printf '%s' "the $what lock is held by podman, not by a session:$names.
+  A container inherited the lock fd and holds it for its whole lifetime, so this
+  will never clear on its own. Recreate that container to release it, e.g.
+    podman restart <the container this project runs locally>
+  Lock file: $lock" ;;
+    "")
+      printf '%s' "could not take the $what lock and nothing holds it; retry once." ;;
+    *)
+      printf '%s' "another session is $what; try again shortly." ;;
+  esac
+}
+
 cmd_ship() {
   local sync=1
   [ "${1:-}" = "--no-sync" ] && { sync=0; shift; }
@@ -109,7 +137,7 @@ cmd_ship() {
   git -C $wt status --short"
 
   exec 7>"$KEEL_WT_LOCKS/ship-$PROJ.lock"
-  flock -w 180 7 || die "another session is shipping $PROJ; try again shortly."
+  flock -w 180 7 || die "$(lock_blocked_msg "$KEEL_WT_LOCKS/ship-$PROJ.lock" "shipping $PROJ")"
 
   git -C "$wt" fetch -q origin "$BASE_BRANCH" || die "fetch failed."
   local ahead; ahead="$(git -C "$wt" rev-list --count "origin/$BASE_BRANCH..HEAD")"
@@ -128,7 +156,13 @@ cmd_ship() {
 
   if [ "$sync" = "1" ] && [ -n "$LOCAL_SYNC" ] && [ -f "$REPO/$LOCAL_SYNC" ]; then
     echo "wt: syncing the local preview tree..."
-    bash "$REPO/$LOCAL_SYNC" 2>&1 | sed 's/^/    /'
+    # 7>&- closes the ship lock for the child. Without it the sync's
+    # `podman restart` hands fd 7 to conmon and rootlessport, which then hold
+    # this project's ship lock for the container's entire lifetime -- so every
+    # later `wt ship` in every session waits 180s and reports a sibling that is
+    # not there. Observed on signalbots 2026-08-24. Same flock-fd-leak class as
+    # the fd 9 close in that repo's sync hook and the prod deploy fix.
+    bash "$REPO/$LOCAL_SYNC" 7>&- 2>&1 | sed 's/^/    /'
   fi
 }
 
@@ -208,7 +242,7 @@ cmd_deploy() {
   if ! flock -n 7; then
     echo "wt: another session is deploying $PROJ${claim:+ — $(cat "$claim" 2>/dev/null)}"
     echo "wt: waiting for it to finish (up to 45m)..."
-    flock -w 2700 7 || die "the $PROJ deploy lock is still held after 45m; check /tasks or the Actions tab."
+    flock -w 2700 7 || die "$(lock_blocked_msg "$KEEL_WT_LOCKS/deploy-$PROJ.lock" "deploying $PROJ")"
   fi
 
   git -C "$REPO" fetch -q origin "$BASE_BRANCH" 2>/dev/null
