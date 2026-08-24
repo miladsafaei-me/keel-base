@@ -34,7 +34,12 @@ check WRITE "rm inside a shared tree"               "rm -f $W/revenika/README.md
 check WRITE "write reached through a second stmt"   "cd /tmp && echo x > $W/martiland/a.txt"
 check WRITE "new file in a shared tree"             "echo x > $W/martiland/brand-new.txt"
 
+check WRITE "quoted decoy does not hide a real write" "echo \"a > b\" > $W/revenika/README.md"
+
 check CLEAN "read-only cat of a shared tree"        "cat $W/revenika/README.md"
+check CLEAN "ASCII arrow inside a quoted echo"      "echo \"   -> wt exit 0\""
+check CLEAN "ASCII arrow in single quotes"          "echo 'deploy -> done'"
+check CLEAN "stderr redirected onto stdout"         "wt deploy revenika 2>&1 | tail -6"
 check CLEAN "grep whose pattern looks like a path"  "grep -n s/a/b/ $W/martiland/README.md"
 check CLEAN "git command against a shared tree"     "git -C $W/revenika status"
 check CLEAN "git worktree remove"                   "git -C $W/revenika worktree remove --force $W/.worktrees/revenika/aaaa1111"

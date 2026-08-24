@@ -87,6 +87,42 @@ def guarded(path):
     return root, abs_path
 
 
+def mask_quoted(command):
+    """Blank the inside of quoted spans, preserving length and newlines.
+
+    The redirect scan below is a regex over the raw command, so any `>` inside a
+    string literal reads as a redirection: `echo "step -> done"` was blocked as a
+    write to a file named `done`. A redirect operator is never inside quotes, so
+    masking the literals first removes that whole class of false positive. If the
+    command ends inside an unterminated quote the masking cannot be trusted, so
+    the original string is returned and the guard stays on the strict side.
+    """
+    out, quote, i, n = [], None, 0, len(command)
+    while i < n:
+        c = command[i]
+        if quote is None:
+            if c in "'\"":
+                quote = c
+                out.append(c)
+                i += 1
+                continue
+            if c == "\\" and i + 1 < n:
+                out.append(c); out.append(command[i + 1]); i += 2
+                continue
+            out.append(c); i += 1
+        else:
+            if c == quote:
+                quote = None; out.append(c); i += 1
+                continue
+            if quote == '"' and c == "\\" and i + 1 < n:
+                out.append(" "); out.append(" " if command[i + 1] != "\n" else "\n"); i += 2
+                continue
+            out.append("\n" if c == "\n" else " "); i += 1
+    if quote is not None:
+        return command
+    return "".join(out)
+
+
 def write_targets(command):
     """Every path the command would write to, best effort.
 
@@ -95,7 +131,7 @@ def write_targets(command):
     turns whatever follows into a filename.
     """
     out = []
-    for m in re.finditer(r"(?<![0-9<>])>>?\s*([^\s;|&()<>]+)", command):
+    for m in re.finditer(r"(?<![0-9<>])>>?\s*([^\s;|&()<>]+)", mask_quoted(command)):
         out.append(m.group(1))
 
     for statement in re.split(r"\n|;|&&|\|\||\||&", command):
