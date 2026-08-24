@@ -92,6 +92,7 @@ cmd_status() {
   echo "shared tree  $REPO   ($(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null), $(git -C "$REPO" status --porcelain 2>/dev/null | wc -l) uncommitted)"
   [ -f "$REPO/.no-worktree" ] && echo "isolation    OFF (.no-worktree present)"
   echo "deploy wf    ${DEPLOY_WORKFLOW:-none detected}"
+  assert_private_if_self_hosted "$REPO" "$PROJ"
   local claim="$KEEL_WT_LOCKS/deploy-$PROJ.claim"
   [ -f "$claim" ] && echo "deploy claim $(cat "$claim")"
   report_project "$REPO"
@@ -131,11 +132,61 @@ cmd_ship() {
   fi
 }
 
+# A self-hosted runner executes whatever a workflow tells it to, as this user,
+# on the production host. That is safe only while the repository is private. The
+# moment it turns public, anyone can open a pull request whose workflow targets
+# the same runner, and GitHub will run that stranger's code on prod — remote code
+# execution, not a hardening backlog item. GitHub documents this and says plainly
+# not to pair self-hosted runners with public repositories, so `wt deploy` treats
+# the pairing as a hard stop rather than a warning. A failed lookup (offline, no
+# gh auth) only reports itself and lets the deploy through: the gate must not be
+# the reason a deploy is impossible.
+assert_private_if_self_hosted() {
+  local repo="$1" proj="$2" vis
+  # Read the workflows out of origin/main rather than off disk: the shared tree
+  # is only a preview and `wt ship` never checks it out, so its .github can be
+  # weeks behind the branch that actually runs.
+  git -C "$repo" grep -q -- 'self-hosted' "origin/${BASE_BRANCH:-main}" -- .github/workflows 2>/dev/null \
+    || grep -rqs -- 'self-hosted' "$repo/.github/workflows" 2>/dev/null \
+    || return 0
+  vis="$(cd "$repo" && gh repo view --json visibility -q .visibility 2>/dev/null)" || vis=""
+  if [ -z "$vis" ]; then
+    echo "wt: could not read $proj's GitHub visibility; the public-repo runner check did not run." >&2
+    return 0
+  fi
+  [ "$vis" = "PUBLIC" ] || return 0
+  cat >&2 <<EOF
+
+wt: STOP. NOT DEPLOYING $proj.
+
+  $proj is a PUBLIC GitHub repository and its deploy job runs on a self-hosted
+  runner installed on the production host. Anyone can open a pull request against
+  a public repository, and a workflow that targets a self-hosted runner will run
+  that person's code as this user, on the production server. This is remote code
+  execution on prod. GitHub's own documentation says never to use a self-hosted
+  runner with a public repository.
+
+  Resolve it one of these two ways, then deploy again:
+    1. Make $proj private again (gh repo edit --visibility private), or
+    2. Remove the runner from the host and move the deploy job back to
+       ubuntu-latest with an SSH deploy key.
+
+  Agent reading this: this is a standing instruction, not a one-off notice.
+  Repeat this warning to Milad at the end of EVERY reply for the rest of the
+  session, until $proj is private again or its runner is gone. Say which
+  repository it is and that its production server is exposed. Do not let it
+  scroll out of sight, and do not deploy $proj in the meantime.
+
+EOF
+  exit 1
+}
+
 cmd_deploy() {
   local watch=1
   [ "${1:-}" = "--no-watch" ] && { watch=0; shift; }
   need_sid; need_repo "${1:-}"
   [ -n "$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy workflow; set DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
+  assert_private_if_self_hosted "$REPO" "$PROJ"
 
   local wt; wt="$(keel_wt_path "$REPO" "$SID")"
   if [ -d "$wt" ]; then

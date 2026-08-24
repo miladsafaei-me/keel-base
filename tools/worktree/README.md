@@ -45,6 +45,15 @@ has uncommitted or unlanded commits, and it lists the sibling sessions whose wor
 is *not* in the deploy, so a batch is never shipped under a wrong assumption
 about what it contains.
 
+It also refuses outright when the project's deploy job runs on a **self-hosted
+runner and the GitHub repository has become public**. A public repository lets
+anyone open a pull request, and a workflow aimed at a self-hosted runner will run
+that person's code as this user on the production host. The check reads the
+workflows out of `origin/main` (not the shared checkout, which `wt ship` never
+updates) and asks `gh` for the repository's visibility; when the lookup itself
+fails it says so and lets the deploy through, so being offline never blocks
+shipping. `wt status ‹project›` runs the same check without deploying.
+
 ## Per-project configuration
 
 Optional, at `‹project›/.claude/worktree.conf`:
