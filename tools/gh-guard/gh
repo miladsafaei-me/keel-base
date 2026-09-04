@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# A PATH shim for the GitHub CLI that fixes one expensive default.
+#
+# `gh run watch` refreshes every 3 seconds unless told otherwise, and each
+# refresh costs about 5 REST calls (the run, its jobs, and one annotations call
+# per job). That is ~100 requests a minute -- a single nine-minute deploy watch
+# spends ~900 of the account's 5,000 hourly requests, and two agents watching
+# their own deploys exhaust the quota inside an hour. Measured 2026-09-04:
+# 18.7 minutes of watching burned 1,863 requests.
+#
+# So: any `gh run watch` that does not name an interval gets one. Every other
+# gh command is passed through untouched, and an explicit --interval always
+# wins. Override the injected value with GH_WATCH_INTERVAL.
+
+set -uo pipefail
+
+INTERVAL="${GH_WATCH_INTERVAL:-20}"
+
+SELF_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+LINK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+find_real_gh() {
+  if [ -x /usr/bin/gh ]; then printf '%s' /usr/bin/gh; return 0; fi
+  local dir
+  local -a keep=()
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    [ "$dir" = "$SELF_DIR" ] && continue
+    [ "$dir" = "$LINK_DIR" ] && continue
+    keep+=("$dir")
+  done < <(printf '%s' "${PATH:-}" | tr ':' '\n')
+  local joined
+  joined="$(printf '%s\n' "${keep[@]}" | paste -sd: -)"
+  PATH="$joined" command -v gh
+}
+
+REAL_GH="$(find_real_gh)"
+if [ -z "$REAL_GH" ]; then
+  echo "gh-guard: cannot find the real gh binary" >&2
+  exit 127
+fi
+
+# Walk the arguments in order to find the first two positional words, so the
+# `run watch` pair is recognised wherever the flags happen to sit. Flags that
+# take a separate value have that value skipped, or it would be mistaken for a
+# positional word.
+positionals=()
+wants_value=0
+saw_interval=0
+saw_help=0
+for arg in "$@"; do
+  if [ "$wants_value" -eq 1 ]; then wants_value=0; continue; fi
+  case "$arg" in
+    -i|--interval) saw_interval=1; wants_value=1 ;;
+    --interval=*) saw_interval=1 ;;
+    -h|--help) saw_help=1 ;;
+    -R|--repo|--hostname|--jq|-q|--template|-t|--json) wants_value=1 ;;
+    --*=*) ;;
+    -*) ;;
+    *) positionals+=("$arg") ;;
+  esac
+done
+
+inject=0
+if [ "$saw_interval" -eq 0 ] && [ "$saw_help" -eq 0 ] && [ "${#positionals[@]}" -ge 2 ]; then
+  if [ "${positionals[0]}" = "run" ] && [ "${positionals[1]}" = "watch" ]; then
+    inject=1
+  fi
+fi
+
+if [ "$inject" -eq 1 ]; then
+  echo "gh-guard: added --interval $INTERVAL to 'gh run watch' (the 3s default costs ~100 API req/min)" >&2
+  set -- "$@" --interval "$INTERVAL"
+fi
+
+if [ "${GH_GUARD_DRYRUN:-}" = "1" ]; then
+  printf '%s\n' "$REAL_GH $*"
+  exit 0
+fi
+
+exec "$REAL_GH" "$@"
