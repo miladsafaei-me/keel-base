@@ -51,11 +51,15 @@ git -C "$build_dir" clean -ffdxq
 lock=()
 [ -n "$HOST_LOCK" ] && lock=(flock -o -w 3600 "$HOST_LOCK")
 
+# RELEASE_VERSION is passed to every build: a Dockerfile that declares the ARG
+# (prop-firm-review bakes it into its hashed-static manifest) gets the commit,
+# and one that does not simply ignores it.
 echo "[ship] building $image:$short on $(hostname -s)..."
 started=$SECONDS
 "${lock[@]}" nice -n 19 ionice -c 3 \
     podman build --layers \
         --file "$build_dir/$file" \
+        --build-arg "RELEASE_VERSION=$sha" \
         --tag "$image:latest" \
         --tag "$image:$short" \
         --label "org.opencontainers.image.revision=$sha" \
