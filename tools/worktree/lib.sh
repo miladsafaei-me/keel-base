@@ -66,6 +66,9 @@ keel_wt_resolve_repo() {
 #   DATA_DIRS         space/newline separated git-ignored dirs to bridge in
 #   DATA_GITIGNORE    a .gitignore whose entries become DATA_DIRS (relative to it)
 #   DEPLOY_WORKFLOW   GitHub Actions workflow file or name for `wt deploy`
+#   DEPLOY_COMMAND    repo-relative script `wt deploy` runs instead of a workflow
+#                     (read from origin/<BASE_BRANCH>, so the deploy tooling always
+#                     matches the commit being deployed); extra args pass through
 #   LOCAL_SYNC        repo-relative script run after a successful ship
 #   BASE_BRANCH       defaults to main
 keel_wt_load_conf() {
@@ -73,6 +76,7 @@ keel_wt_load_conf() {
   DATA_DIRS="backend/media"
   DATA_GITIGNORE=""
   DEPLOY_WORKFLOW=""
+  DEPLOY_COMMAND=""
   LOCAL_SYNC=""
   BASE_BRANCH="main"
   if [ -f "$repo/.claude/worktree.conf" ]; then
@@ -85,7 +89,7 @@ keel_wt_load_conf() {
       DATA_DIRS="$DATA_DIRS ${entry%/}"
     done < "$repo/.claude/worktree-data-dirs"
   fi
-  if [ -z "$DEPLOY_WORKFLOW" ] && [ -f "$repo/.github/workflows/build-image.yml" ]; then
+  if [ -z "$DEPLOY_COMMAND" ] && [ -z "$DEPLOY_WORKFLOW" ] && [ -f "$repo/.github/workflows/build-image.yml" ]; then
     DEPLOY_WORKFLOW="build-image.yml"
   fi
   if [ -z "$LOCAL_SYNC" ] && [ -x "$repo/.claude/hooks/sync-local-to-main.sh" ]; then

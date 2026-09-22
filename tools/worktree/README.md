@@ -30,7 +30,7 @@ wt [<project>]        print (creating if needed) this session's worktree
 wt ls                 this session's worktrees and every sibling's unlanded work
 wt status <project>   detail for one project, including any deploy in flight
 wt ship <project>     rebase onto origin/main, push to main, sync the local preview
-wt deploy <project>   locked deploy: one build at a time across all sessions
+wt deploy <project> [args]   locked deploy: one build at a time across all sessions
 wt off|on <project>   toggle isolation for a project
 wt sweep              collect shipped/empty worktrees now
 ```
@@ -62,6 +62,7 @@ Optional, at `‹project›/.claude/worktree.conf`:
 DATA_DIRS="backend/media docs/keywords"   # git-ignored data to bridge into the worktree
 DATA_GITIGNORE="docs/seo/.gitignore"      # or take the list from a .gitignore
 DEPLOY_WORKFLOW="build-image.yml"         # auto-detected when absent
+DEPLOY_COMMAND="deploy/ship.sh"           # or: a repo script instead of a workflow
 LOCAL_SYNC=".claude/hooks/sync-local-to-main.sh"   # auto-detected when executable
 BASE_BRANCH="main"
 ```

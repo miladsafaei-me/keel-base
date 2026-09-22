@@ -6,7 +6,7 @@
 #   wt ls                 this session's worktrees and sibling sessions' WIP
 #   wt status <project>   detail for one project
 #   wt ship <project>     rebase onto origin/main, push to main, sync local
-#   wt deploy <project>   locked deploy: one build at a time across sessions
+#   wt deploy <project> [args]  locked deploy: one build at a time across sessions
 #   wt off|on <project>   toggle isolation for a project (.no-worktree)
 #   wt sweep              collect shipped/empty worktrees now
 
@@ -91,7 +91,11 @@ cmd_status() {
   echo "project      $PROJ"
   echo "shared tree  $REPO   ($(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null), $(git -C "$REPO" status --porcelain 2>/dev/null | wc -l) uncommitted)"
   [ -f "$REPO/.no-worktree" ] && echo "isolation    OFF (.no-worktree present)"
-  echo "deploy wf    ${DEPLOY_WORKFLOW:-none detected}"
+  if [ -n "$DEPLOY_COMMAND" ]; then
+    echo "deploy cmd   $DEPLOY_COMMAND"
+  else
+    echo "deploy wf    ${DEPLOY_WORKFLOW:-none detected}"
+  fi
   assert_private_if_self_hosted "$REPO" "$PROJ"
   local claim="$KEEL_WT_LOCKS/deploy-$PROJ.claim"
   [ -f "$claim" ] && echo "deploy claim $(cat "$claim")"
@@ -224,9 +228,9 @@ EOF
 cmd_deploy() {
   local watch=1
   [ "${1:-}" = "--no-watch" ] && { watch=0; shift; }
-  need_sid; need_repo "${1:-}"
-  [ -n "$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy workflow; set DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
-  assert_private_if_self_hosted "$REPO" "$PROJ"
+  need_sid; need_repo "${1:-}"; shift
+  [ -n "$DEPLOY_COMMAND$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy; set DEPLOY_COMMAND or DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
+  [ -n "$DEPLOY_COMMAND" ] || assert_private_if_self_hosted "$REPO" "$PROJ"
 
   local wt; wt="$(keel_wt_path "$REPO" "$SID")"
   if [ -d "$wt" ]; then
@@ -264,6 +268,21 @@ cmd_deploy() {
   if [ -n "$held" ]; then
     echo "wt: NOT in this deploy — sibling sessions still hold unlanded work:"
     printf '%s' "$held"
+  fi
+
+  if [ -n "$DEPLOY_COMMAND" ]; then
+    # No CI in the loop: run the project's own deploy script, taken from the
+    # commit being deployed rather than whatever branch the shared tree has out.
+    echo "wt: deploying $PROJ at origin/$BASE_BRANCH@$sha via $DEPLOY_COMMAND $*"
+    local script; script="$(mktemp)"
+    git -C "$REPO" show "origin/$BASE_BRANCH:$DEPLOY_COMMAND" > "$script" \
+      || { rm -f "$script"; die "$DEPLOY_COMMAND is not on origin/$BASE_BRANCH."; }
+    if ( cd "$REPO" && KEEL_WT_DEPLOY_INNER=1 bash "$script" "$@" 7>&- ); then
+      rm -f "$script"; echo "wt: $PROJ deploy GREEN ($sha)"
+    else
+      rm -f "$script"; die "$PROJ deploy FAILED — see the log above. The lock is released."
+    fi
+    return 0
   fi
 
   echo "wt: deploying $PROJ at origin/$BASE_BRANCH@$sha via '$DEPLOY_WORKFLOW'"
