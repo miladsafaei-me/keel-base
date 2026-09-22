@@ -7,14 +7,14 @@
 # (${PROJECT_SLUG}_default) and volumes (${PROJECT_SLUG}_media) that prod-deploy.sh
 # references resolve.
 #
-# IMAGE_REF is the built image (ghcr.io/OWNER/REPO-web:latest) — a Bucket-3 blank
+# IMAGE_REF is the image built on the prod host (localhost/REPO-web:latest) — a Bucket-3 blank
 # set in deploy/deploy.env. Every service: restart policy + `:z` on bind mounts.
 
 name: keel
 
 x-web-base: &web-base
   restart: unless-stopped
-  image: ${IMAGE_REF:-ghcr.io/OWNER/keel-web:latest}
+  image: ${IMAGE_REF:-localhost/keel-web:latest}
   command: gunicorn -c gunicorn.conf.py config.wsgi:application
   env_file: .env
   volumes:

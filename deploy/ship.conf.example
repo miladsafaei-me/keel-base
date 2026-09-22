@@ -1,0 +1,19 @@
+# Copy to deploy/ship.conf and fill in for this project. Read by keel-base
+# tools/deploy/{ship,server-ship}.sh, which `wt deploy <project>` runs: the
+# commit goes over SSH into the prod checkout, the image is built on that host
+# and the project's own deploy script runs there. No CI, no registry.
+PROJECT="keel"
+PROD_HOST="milad@example.com"
+PROD_KEY="$HOME/.ssh/keel_deploy_key"      # optional; omit to use the ssh default
+PROD_REPO="www/keel"                       # path on the host, relative to $HOME
+
+# Set when several projects share one host, so two builds never grind the same
+# disk at once. The deploy script takes the same lock itself, after the build
+# has released it.
+# HOST_LOCK="/tmp/www-contabo-deploy.lock"
+
+TARGETS="web"
+TARGET_web_IMAGE="localhost/keel-web"
+TARGET_web_CONTEXT="."
+TARGET_web_FILE="Dockerfile"
+TARGET_web_DEPLOY="deploy/prod-deploy.sh"

@@ -25,7 +25,7 @@ if [ -f deploy/deploy.env ]; then
 fi
 
 PROJECT_SLUG="${PROJECT_SLUG:-keel}"
-IMAGE_REF="${IMAGE_REF:-ghcr.io/OWNER/keel-web:latest}"
+IMAGE_REF="${IMAGE_REF:-localhost/keel-web:latest}"
 PROD_HOST="${PROD_HOST:-localhost}"
 COMPOSE_PROD="${COMPOSE_PROD:-compose.prod.yaml}"
 
@@ -67,8 +67,9 @@ if [ -n "${NGINX_CONF_SRC:-}" ] && [ -n "${NGINX_CONF_DST:-}" ]; then
     fi
 fi
 
-echo "[deploy] Pulling new image..."
-podman pull "$IMAGE_REF"
+# The image was just built on this host by the shared ship tooling.
+podman image exists "$IMAGE_REF" \
+    || { echo "[deploy] ERROR: $IMAGE_REF is missing on this host — run: wt deploy <project>"; exit 1; }
 
 # oneshot: run a manage.py command in a throwaway container on the new image. We
 # bypass `podman compose run --rm web` on purpose — podman-compose v1.x treats it

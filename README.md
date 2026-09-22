@@ -11,7 +11,7 @@ things a new project always needs and never wants to re-derive:
    host's apps.
 2. **The shared operations infra** — from SignalBots, generalized: rootless-podman
    `compose.yaml` / `compose.prod.yaml` (blue-green web tier), a canary-gated
-   `deploy/prod-deploy.sh`, manual+batched GitHub Actions (`build-image` + opt-in
+   `deploy/prod-deploy.sh`, manual+batched host-build deploys (`deploy/ship.conf` + opt-in
    `pr-checks`), a 3-mode `entrypoint.sh`, and the worktree-isolation +
    sync-local-to-main Claude hooks.
 
@@ -41,9 +41,11 @@ keel-base/
 ├── deploy/
 │   ├── prod-deploy.sh                  canary + blue-green cutover
 │   ├── deploy.env.example              PROJECT_SLUG / IMAGE_REF / PROD_HOST blanks
+│   ├── ship.conf.example               prod host + build targets for `wt deploy`
 │   ├── critical-paths.txt              pages the canary refuses to ship broken
 │   └── nginx/site.conf.example         prod upstream sample
-├── .github/workflows/                  build-image.yml + pr-checks.yml
+├── .github/workflows/                  pr-checks.yml (no build workflow: the
+│                                       image is built on the prod host)
 ├── .claude/                            worktree hooks + settings.json + data-dirs
 ├── keel-capabilities.yml               the capability registry (picker + panel source)
 └── BOOTSTRAP.md                        one-time fork checklist (self-deletes)
