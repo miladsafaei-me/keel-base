@@ -91,7 +91,9 @@ cmd_status() {
   echo "project      $PROJ"
   echo "shared tree  $REPO   ($(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null), $(git -C "$REPO" status --porcelain 2>/dev/null | wc -l) uncommitted)"
   [ -f "$REPO/.no-worktree" ] && echo "isolation    OFF (.no-worktree present)"
-  if [ -n "$DEPLOY_COMMAND" ]; then
+  if [ -n "$DEPLOY_SHIP" ]; then
+    echo "deploy       host build via $DEPLOY_SHIP"
+  elif [ -n "$DEPLOY_COMMAND" ]; then
     echo "deploy cmd   $DEPLOY_COMMAND"
   else
     echo "deploy wf    ${DEPLOY_WORKFLOW:-none detected}"
@@ -229,8 +231,8 @@ cmd_deploy() {
   local watch=1
   [ "${1:-}" = "--no-watch" ] && { watch=0; shift; }
   need_sid; need_repo "${1:-}"; shift
-  [ -n "$DEPLOY_COMMAND$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy; set DEPLOY_COMMAND or DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
-  [ -n "$DEPLOY_COMMAND" ] || assert_private_if_self_hosted "$REPO" "$PROJ"
+  [ -n "$DEPLOY_SHIP$DEPLOY_COMMAND$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy; add deploy/ship.conf, or set DEPLOY_COMMAND/DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
+  [ -n "$DEPLOY_SHIP$DEPLOY_COMMAND" ] || assert_private_if_self_hosted "$REPO" "$PROJ"
 
   local wt; wt="$(keel_wt_path "$REPO" "$SID")"
   if [ -d "$wt" ]; then
@@ -268,6 +270,18 @@ cmd_deploy() {
   if [ -n "$held" ]; then
     echo "wt: NOT in this deploy — sibling sessions still hold unlanded work:"
     printf '%s' "$held"
+  fi
+
+  if [ -n "$DEPLOY_SHIP" ]; then
+    # No CI and no registry: build the image on the project's own prod host.
+    echo "wt: deploying $PROJ at origin/$BASE_BRANCH@$sha — host build${1:+ (target $1)}"
+    if ( cd "$REPO" && KEEL_WT_DEPLOY_INNER=1 KEEL_SHIP_REPO="$REPO" SHIP_REF="origin/$BASE_BRANCH" \
+           bash "$_KEEL_WT_DIR/../deploy/ship.sh" "$@" 7>&- ); then
+      echo "wt: $PROJ deploy GREEN ($sha)"
+    else
+      die "$PROJ deploy FAILED — see the log above. The lock is released."
+    fi
+    return 0
   fi
 
   if [ -n "$DEPLOY_COMMAND" ]; then
