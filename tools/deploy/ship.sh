@@ -19,6 +19,8 @@
 #   TARGET_web_CONTEXT="."
 #   TARGET_web_FILE="Dockerfile"
 #   TARGET_web_DEPLOY="deploy/prod-deploy.sh"
+#   HOST_LOCK="/tmp/www-contabo-deploy.lock"   # optional: serialize builds that
+#                                              # share a host with other projects
 #
 # What happens:
 #   1. The commit is pushed over SSH straight into the prod checkout, as the ref

@@ -20,7 +20,7 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
 
 conf="deploy/ship.conf"
 [ -f "$conf" ] || { echo "[ship] ERROR: $PWD/$conf is missing" >&2; exit 2; }
-PROJECT=""; TARGETS=""
+PROJECT=""; TARGETS=""; HOST_LOCK=""
 # shellcheck disable=SC1090
 . "$conf"
 
@@ -44,9 +44,16 @@ fi
 git -C "$build_dir" checkout --detach --force -q "$sha"
 git -C "$build_dir" clean -ffdxq
 
+# A host that runs several projects sets HOST_LOCK in ship.conf so two builds
+# never grind the same disk at once. The lock is held for the build ONLY: the
+# project's own deploy script takes the same lock itself, and flock is not
+# reentrant, so holding it across that call would deadlock.
+lock=()
+[ -n "$HOST_LOCK" ] && lock=(flock -o -w 3600 "$HOST_LOCK")
+
 echo "[ship] building $image:$short on $(hostname -s)..."
 started=$SECONDS
-nice -n 19 ionice -c 3 \
+"${lock[@]}" nice -n 19 ionice -c 3 \
     podman build --layers \
         --file "$build_dir/$file" \
         --tag "$image:latest" \
