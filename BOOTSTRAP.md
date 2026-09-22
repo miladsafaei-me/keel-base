@@ -61,8 +61,10 @@ base and add a `backend/scripts/bootstrap-extra.sh` (the entrypoint runs it).
 ## 6. First ship
 
 - [ ] Commit, push to `main` (accumulate-on-main — this does NOT deploy).
-- [ ] When ready: `gh workflow run "Build & push web image"`, watch it until
-  build + canary + deploy are green.
+- [ ] Fill in `deploy/ship.conf` from `deploy/ship.conf.example` (prod host, SSH
+  key, repo path on that host, build targets).
+- [ ] When ready: `wt deploy <project>` — it builds the image on the prod host
+  and runs the canary-gated deploy there; watch it until it reports green.
 - [ ] Verify prod: `curl -s https://<domain>/healthz` returns `{"status":"ok"}`.
 
 ## 7. Clean up

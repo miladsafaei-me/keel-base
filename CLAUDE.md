@@ -83,8 +83,10 @@ UI in a fork goes through Django i18n (`gettext`), never hard-coded strings.
 ## Deploy model (inherited from keel-kit `deploy-standard.md`)
 
 Accumulate-on-main, deploy-on-command, batched. Pushing to `main` does **not** build
-or deploy. A human ships a batch with `gh workflow run "Build & push web image"`,
-which builds current `main` HEAD once and runs the canary-gated `prod-deploy.sh`.
+or deploy. A human ships a batch with `wt deploy <project>`,
+which pushes current `main` HEAD to the prod host over SSH, builds the image
+there (no CI, no registry — see `deploy/ship.conf`) and runs the canary-gated
+`prod-deploy.sh`.
 The canary boots the new image outside the nginx upstream, smokes every
 `deploy/critical-paths.txt` page against real prod data, and aborts before cutover on
 any failure — so a broken release reaches zero users.
