@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect shipped worktrees and landed wt/* branches across the workspace
+Documentation=file:%h/www/keel-base/tools/worktree/README.md
+
+[Service]
+Type=oneshot
+ExecStart=%h/www/keel-base/tools/worktree/sweep-all.sh --quiet
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=15min

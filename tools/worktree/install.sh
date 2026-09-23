@@ -33,6 +33,22 @@ done
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$IMPL_DIR/wt" "$HOME/.local/bin/wt"
 
+# The sweep also runs at SessionStart, but only while somebody has a session
+# open. The timer is what makes cleanup independent of that, and of anyone
+# remembering: it fetches first, then collects shipped worktrees and wt/*
+# branches origin/<base> already contains, in every project.
+UNITS="$HOME/.config/systemd/user"
+mkdir -p "$UNITS"
+install -m644 "$IMPL_DIR/systemd/keel-wt-sweep.service" "$IMPL_DIR/systemd/keel-wt-sweep.timer" "$UNITS/"
+if systemctl --user show-environment >/dev/null 2>&1; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now keel-wt-sweep.timer >/dev/null 2>&1 \
+    && echo "installed: keel-wt-sweep.timer (daily)" \
+    || echo "warning: could not enable keel-wt-sweep.timer" >&2
+else
+  echo "no user systemd here; enable later with: systemctl --user enable --now keel-wt-sweep.timer"
+fi
+
 CLAUDE_DIR="$CLAUDE_DIR" python3 - <<'PY'
 import collections, json, os
 

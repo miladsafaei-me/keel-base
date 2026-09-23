@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily worktree and branch sweep across the workspace
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+AccuracySec=5m
+
+[Install]
+WantedBy=timers.target

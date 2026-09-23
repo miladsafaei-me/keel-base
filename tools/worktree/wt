@@ -8,7 +8,7 @@
 #   wt ship <project>     rebase onto origin/main, push to main, sync local
 #   wt deploy <project> [args]  locked deploy: one build at a time across sessions
 #   wt off|on <project>   toggle isolation for a project (.no-worktree)
-#   wt sweep              collect shipped/empty worktrees now
+#   wt sweep              collect shipped worktrees and landed wt/* branches now
 
 set -u
 . "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/lib.sh"
@@ -345,7 +345,7 @@ cmd_sweep() {
     keel_wt_load_conf "$repo"
     KEEL_WT_MAX_AGE_MIN="${KEEL_WT_MAX_AGE_MIN:-0}" keel_wt_sweep "$repo" "$(keel_wt_path "$repo" "$SID")"
   done
-  echo "wt: swept shipped/empty worktrees."
+  echo "wt: swept shipped worktrees and landed wt/* branches."
   cmd_ls
 }
 

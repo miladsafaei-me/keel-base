@@ -169,6 +169,38 @@ keel_wt_list_secondary() {
 # more than $KEEL_WT_MAX_AGE_MIN (default 48h). The age gate avoids racing a
 # live sibling; only paths we own are ever touched, so an editor's or another
 # agent's worktree elsewhere on disk is never removed.
+# A wt/<sid> branch outlives its worktree. The directory is removed the moment
+# the work lands -- by the SessionEnd hook, by a sweep, or by `git worktree
+# prune` after something deleted it -- and each of those deletes the branch only
+# as the second half of an `&&`, so any hiccup in the first half orphans it for
+# good. Nothing then ever visits it again, because every other cleanup path
+# iterates worktree directories and an orphan has none. Found 2026-09-23 with 97
+# of them in one project, every one fully merged.
+#
+# The rule is the same one worktrees are collected under, asked of the branch:
+# it goes only when origin/<base> already contains every commit on it. A branch
+# that is ahead is left alone and reported by `wt ls`, so unshipped work is
+# never what housekeeping removes.
+keel_wt_sweep_branches() {
+  local repo="$1" b base checked_out swept=0
+  base="origin/${BASE_BRANCH:-main}"
+  git -C "$repo" rev-parse --verify --quiet "$base" >/dev/null 2>&1 || return 0
+  checked_out="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
+                 | awk '/^branch /{print substr($0,8)}')"
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    printf '%s\n' "$checked_out" | grep -qxF "refs/heads/$b" && continue
+    [ "$(git -C "$repo" rev-list --count "$base..refs/heads/$b" 2>/dev/null || echo 1)" = "0" ] || continue
+    git -C "$repo" branch -D "$b" >/dev/null 2>&1 && swept=$((swept+1))
+  done < <(git -C "$repo" for-each-ref --format='%(refname:short)' 'refs/heads/wt/*' 2>/dev/null)
+  [ "$swept" -gt 0 ] && echo "$swept"
+  return 0
+}
+
+# KEEL_WT_KEEP is a space-separated list of session ids whose worktrees must be
+# left alone whatever their age. A session passes its own path as $2; a timer
+# has no session of its own and would otherwise be free to collect a live one's
+# worktree the moment it passed the age guard, so it fills this instead.
 keel_wt_sweep() {
   local repo="$1" keep="${2:-}" d b age="${KEEL_WT_MAX_AGE_MIN:-2880}"
   git -C "$repo" worktree prune 2>/dev/null
@@ -181,6 +213,7 @@ keel_wt_sweep() {
       *) continue ;;
     esac
     [ -d "$d" ] || continue
+    case " ${KEEL_WT_KEEP:-} " in *" $(basename "$d") "*) continue ;; esac
     [ -n "$(find "$d" -maxdepth 0 -mmin "+$age" 2>/dev/null)" ] || continue
     if keel_wt_collectable "$d"; then
       b="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
@@ -188,6 +221,7 @@ keel_wt_sweep() {
         && git -C "$repo" branch -D "$b" 2>/dev/null
     fi
   done < <(keel_wt_list_secondary "$repo")
+  keel_wt_sweep_branches "$repo" >/dev/null
 }
 
 # Create (or reuse) this session's worktree for one repo and print its path.

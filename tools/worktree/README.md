@@ -32,7 +32,7 @@ wt status <project>   detail for one project, including any deploy in flight
 wt ship <project>     rebase onto origin/main, push to main, sync the local preview
 wt deploy <project> [args]   locked deploy: one build at a time across all sessions
 wt off|on <project>   toggle isolation for a project
-wt sweep              collect shipped/empty worktrees now
+wt sweep              collect shipped worktrees and landed wt/* branches now
 ```
 
 `wt ship` refuses a dirty worktree, rebases, pushes to `main` under a per-project
@@ -90,6 +90,20 @@ is ever lost to housekeeping. Other sessions' worktrees are additionally left
 alone until they are untouched for 48h, which avoids racing a live sibling.
 Only paths under `~/www/.worktrees/` or a legacy `~/www/.‹slug›-worktrees/` are
 ever removed, so worktrees created by other tools elsewhere on disk are safe.
+
+A `wt/<sid>` **branch** outlives its worktree, and until 2026-09-23 nothing ever
+collected one: every cleanup path walks worktree directories, and a branch whose
+directory is already gone has none to walk. One project had 97 of them, all
+fully merged. The branch is now swept under the same rule as the worktree, asked
+of the branch itself: it goes only when `origin/<base>` already contains every
+commit on it. A branch that is ahead, or that some worktree still has checked
+out, is left alone.
+
+Cleanup does not depend on anyone opening a session. `keel-wt-sweep.timer` runs
+`sweep-all.sh` once a day across every project in the workspace, fetching first
+so "already merged" is measured against the remote rather than a stale local
+ref. A failed fetch only makes both tests stricter. `bash install.sh` installs
+and enables it; `systemctl --user start keel-wt-sweep` runs it now.
 
 ## Tests
 
