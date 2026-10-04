@@ -36,8 +36,21 @@
 set -euo pipefail
 
 repo="${KEEL_SHIP_REPO:-$(git rev-parse --show-toplevel)}"
-conf="$repo/deploy/ship.conf"
-[ -f "$conf" ] || { echo "ship: no $conf — this project is not on the host-build deploy." >&2; exit 2; }
+cd "$repo"
+ref="${SHIP_REF:-origin/main}"
+case "$ref" in
+    # Fail loudly rather than ship a stale cached remote branch.
+    origin/*) git fetch -q origin "${ref#origin/}" ;;
+esac
+sha="$(git rev-parse --verify "${ref}^{commit}")"
+
+# The config comes from the commit being deployed, not from the checkout on disk:
+# the shared checkout is never updated by `wt ship` and can be weeks behind, and a
+# rollback should deploy with the config its own commit carried.
+conf="$(mktemp)"
+trap 'rm -f "$conf"' EXIT
+git show "$sha:deploy/ship.conf" > "$conf" 2>/dev/null \
+    || { echo "ship: no deploy/ship.conf at ${sha:0:8} — this project is not on the host-build deploy." >&2; exit 2; }
 
 PROJECT=""; PROD_HOST=""; PROD_KEY=""; PROD_REPO=""; TARGETS=""
 # shellcheck disable=SC1090
@@ -52,14 +65,6 @@ case " $TARGETS " in *" $target "*) ;; *) echo "ship: unknown target '$target' (
 
 ssh_opts=(-o ServerAliveInterval=30 -o ServerAliveCountMax=6)
 [ -n "$PROD_KEY" ] && ssh_opts+=(-i "$PROD_KEY" -o IdentitiesOnly=yes)
-
-cd "$repo"
-ref="${SHIP_REF:-origin/main}"
-case "$ref" in
-    # Fail loudly rather than ship a stale cached remote branch.
-    origin/*) git fetch -q origin "${ref#origin/}" ;;
-esac
-sha="$(git rev-parse --verify "${ref}^{commit}")"
 
 echo "[ship] $PROJECT/$target at ${sha:0:8} ($(git log -1 --format=%s "$sha"))"
 echo "[ship] pushing the commit to $PROD_HOST..."

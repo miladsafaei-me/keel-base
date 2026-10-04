@@ -96,7 +96,7 @@ cmd_status() {
   elif [ -n "$DEPLOY_COMMAND" ]; then
     echo "deploy cmd   $DEPLOY_COMMAND"
   else
-    echo "deploy wf    ${DEPLOY_WORKFLOW:-none detected}"
+    echo "deploy       none (no deploy/ship.conf on origin/$BASE_BRANCH, no DEPLOY_COMMAND)"
   fi
   assert_private_if_self_hosted "$REPO" "$PROJ"
   local claim="$KEEL_WT_LOCKS/deploy-$PROJ.claim"
@@ -228,11 +228,13 @@ EOF
 }
 
 cmd_deploy() {
-  local watch=1
-  [ "${1:-}" = "--no-watch" ] && { watch=0; shift; }
+  # --no-watch only ever applied to the retired GitHub Actions path; it is
+  # accepted and ignored so an old habit does not become an error.
+  [ "${1:-}" = "--no-watch" ] && shift
   need_sid; need_repo "${1:-}"; shift
-  [ -n "$DEPLOY_SHIP$DEPLOY_COMMAND$DEPLOY_WORKFLOW" ] || die "$PROJ has no deploy; add deploy/ship.conf, or set DEPLOY_COMMAND/DEPLOY_WORKFLOW in $REPO/.claude/worktree.conf."
-  [ -n "$DEPLOY_SHIP$DEPLOY_COMMAND" ] || assert_private_if_self_hosted "$REPO" "$PROJ"
+  # Detect against a fresh origin/<BASE_BRANCH>: the method is read from there.
+  git -C "$REPO" fetch -q origin "$BASE_BRANCH" 2>/dev/null && keel_wt_load_conf "$REPO"
+  [ -n "$DEPLOY_SHIP$DEPLOY_COMMAND" ] || die "$PROJ has no deploy: no deploy/ship.conf on origin/$BASE_BRANCH and no DEPLOY_COMMAND in $REPO/.claude/worktree.conf. The GitHub Actions deploy is retired (keel-kit methodology/deploy-standard.md §4b)."
 
   local wt; wt="$(keel_wt_path "$REPO" "$SID")"
   if [ -d "$wt" ]; then
@@ -299,28 +301,7 @@ cmd_deploy() {
     return 0
   fi
 
-  echo "wt: deploying $PROJ at origin/$BASE_BRANCH@$sha via '$DEPLOY_WORKFLOW'"
-  local before after tries
-  before="$(cd "$REPO" && gh run list --workflow "$DEPLOY_WORKFLOW" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo 0)"
-  ( cd "$REPO" && KEEL_WT_DEPLOY_INNER=1 gh workflow run "$DEPLOY_WORKFLOW" --ref "$BASE_BRANCH" ) || die "gh workflow run failed."
-
-  after="$before"; tries=0
-  while [ "$after" = "$before" ] && [ $tries -lt 30 ]; do
-    sleep 3; tries=$((tries+1))
-    after="$(cd "$REPO" && gh run list --workflow "$DEPLOY_WORKFLOW" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "$before")"
-  done
-  if [ "$after" = "$before" ]; then
-    echo "wt: dispatched, but the run id did not appear within 90s. Check: cd $REPO && gh run list --workflow '$DEPLOY_WORKFLOW'"
-    return 0
-  fi
-  echo "wt: run $after  $(cd "$REPO" && gh run view "$after" --json url -q .url 2>/dev/null)"
-  if [ "$watch" = "1" ]; then
-    ( cd "$REPO" && gh run watch "$after" --exit-status --interval 15 ) \
-      && echo "wt: $PROJ deploy GREEN ($sha)" \
-      || die "$PROJ deploy FAILED — see the run above. The lock is released."
-  else
-    echo "wt: not watching (--no-watch); the deploy lock is released now, so a parallel deploy can still race."
-  fi
+  die "$PROJ: no deploy method resolved; the check at the top of cmd_deploy should have refused."
 }
 
 cmd_off() {

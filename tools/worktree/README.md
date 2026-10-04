@@ -45,14 +45,19 @@ has uncommitted or unlanded commits, and it lists the sibling sessions whose wor
 is *not* in the deploy, so a batch is never shipped under a wrong assumption
 about what it contains.
 
-It also refuses outright when the project's deploy job runs on a **self-hosted
-runner and the GitHub repository has become public**. A public repository lets
-anyone open a pull request, and a workflow aimed at a self-hosted runner will run
-that person's code as this user on the production host. The check reads the
-workflows out of `origin/main` (not the shared checkout, which `wt ship` never
-updates) and asks `gh` for the repository's visibility; when the lookup itself
-fails it says so and lets the deploy through, so being offline never blocks
-shipping. `wt status ‹project›` runs the same check without deploying.
+**How it deploys.** A project with `deploy/ship.conf` builds its image on its own
+production host through `tools/deploy/ship.sh`; any other project needs a
+`DEPLOY_COMMAND`, or `wt deploy` refuses. Both the detection and `ship.conf` itself
+are read from `origin/main`, never from the shared checkout, which `wt ship` does
+not update. There is no GitHub Actions path: it was retired with
+`build-image.yml` on 2026-09-23, and on 2026-10-05 a shared checkout still behind
+that date made `wt deploy` dispatch the dead workflow, which is why detection no
+longer looks at the checkout's files.
+
+`wt status ‹project›` still warns when a project has a workflow aimed at a
+**self-hosted runner and the GitHub repository has become public**, since a public
+repository lets anyone open a pull request that such a workflow would run on the
+production host. The check reads the workflows out of `origin/main`.
 
 ## Per-project configuration
 
@@ -61,8 +66,7 @@ Optional, at `‹project›/.claude/worktree.conf`:
 ```sh
 DATA_DIRS="backend/media docs/keywords"   # git-ignored data to bridge into the worktree
 DATA_GITIGNORE="docs/seo/.gitignore"      # or take the list from a .gitignore
-DEPLOY_WORKFLOW="build-image.yml"         # auto-detected when absent
-DEPLOY_COMMAND="deploy/ship.sh"           # or: a repo script instead of a workflow
+DEPLOY_COMMAND="deploy/release.sh"        # a repo script, for a project with no deploy/ship.conf
 LOCAL_SYNC=".claude/hooks/sync-local-to-main.sh"   # auto-detected when executable
 BASE_BRANCH="main"
 ```

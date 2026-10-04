@@ -65,11 +65,11 @@ keel_wt_resolve_repo() {
 # Per-project knobs, all optional, in <repo>/.claude/worktree.conf:
 #   DATA_DIRS         space/newline separated git-ignored dirs to bridge in
 #   DATA_GITIGNORE    a .gitignore whose entries become DATA_DIRS (relative to it)
-#   DEPLOY_WORKFLOW   GitHub Actions workflow file or name for `wt deploy`
-#   DEPLOY_SHIP       set automatically when <repo>/deploy/ship.conf exists: the
-#                     project builds its image on its own production host and
-#                     `wt deploy` runs keel-base tools/deploy/ship.sh for it
-#   DEPLOY_COMMAND    repo-relative script `wt deploy` runs instead of a workflow
+#   DEPLOY_SHIP       set automatically when deploy/ship.conf exists on
+#                     origin/<BASE_BRANCH>: the project builds its image on its
+#                     own production host and `wt deploy` runs keel-base
+#                     tools/deploy/ship.sh for it
+#   DEPLOY_COMMAND    repo-relative script `wt deploy` runs instead of ship.sh
 #                     (read from origin/<BASE_BRANCH>, so the deploy tooling always
 #                     matches the commit being deployed); extra args pass through
 #   LOCAL_SYNC        repo-relative script run after a successful ship
@@ -78,7 +78,6 @@ keel_wt_load_conf() {
   local repo="$1"
   DATA_DIRS="backend/media"
   DATA_GITIGNORE=""
-  DEPLOY_WORKFLOW=""
   DEPLOY_COMMAND=""
   DEPLOY_SHIP=""
   LOCAL_SYNC=""
@@ -93,9 +92,18 @@ keel_wt_load_conf() {
       DATA_DIRS="$DATA_DIRS ${entry%/}"
     done < "$repo/.claude/worktree-data-dirs"
   fi
-  [ -f "$repo/deploy/ship.conf" ] && DEPLOY_SHIP="deploy/ship.conf"
-  if [ -z "$DEPLOY_SHIP" ] && [ -z "$DEPLOY_COMMAND" ] && [ -z "$DEPLOY_WORKFLOW" ] && [ -f "$repo/.github/workflows/build-image.yml" ]; then
-    DEPLOY_WORKFLOW="build-image.yml"
+  # Read from the branch being deployed, never from the shared checkout's files:
+  # `wt ship` does not update that checkout, so it can sit weeks behind main.
+  # Detecting from its working tree once found a retired build-image.yml there
+  # and dispatched the GitHub Actions deploy every project had already left
+  # (2026-10-05). There is no workflow fallback any more: a project deploys by
+  # host build (ship.conf) or by its own DEPLOY_COMMAND, or `wt deploy` refuses.
+  # The working-tree file counts only for a repo with no origin branch at all.
+  if git -C "$repo" cat-file -e "origin/$BASE_BRANCH:deploy/ship.conf" 2>/dev/null; then
+    DEPLOY_SHIP="deploy/ship.conf"
+  elif [ -f "$repo/deploy/ship.conf" ] \
+       && ! git -C "$repo" rev-parse -q --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+    DEPLOY_SHIP="deploy/ship.conf"
   fi
   if [ -z "$LOCAL_SYNC" ] && [ -x "$repo/.claude/hooks/sync-local-to-main.sh" ]; then
     LOCAL_SYNC=".claude/hooks/sync-local-to-main.sh"
