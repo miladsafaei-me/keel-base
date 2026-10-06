@@ -65,7 +65,7 @@ def state(scenario):
     return store
 
 
-def check(page, errors, scenario):
+def check(page, errors, scenario, cfg):
     problems = list(errors)
     sideways = page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
     if sideways:
@@ -73,11 +73,11 @@ def check(page, errors, scenario):
     small = page.evaluate("""() => [...document.querySelectorAll('button, a[href], input, summary, [role=radio]')]
         .filter(e => e.offsetParent !== null && !e.closest('[hidden]'))
         .map(e => [e, e.getBoundingClientRect()])
-        .filter(([e, r]) => r.width > 0 && (r.height < 44 || r.width < 44) && !e.closest('.sa-help__steps, .sa-risk, .gtp-app__foot'))
+        .filter(([e, r]) => r.width > 0 && (r.height < 44 || r.width < 44) && !e.closest('.sa-help__steps, .sa-risk, .gtp-app__foot, .gpt-app__foot'))
         .map(([e, r]) => `${e.tagName.toLowerCase()}.${(e.className.baseVal ?? e.className).split(' ')[0]} "${e.textContent.trim().slice(0, 24)}" ${Math.round(r.width)}x${Math.round(r.height)}`)""")
     problems += ["touch target under 44px: " + s for s in small]
     marks = {"gate": ["#sa-gate:not([hidden])", "[data-affiliate-disclosure]", "[data-start-trial]"],
-             "app": ["#sa-tabs:not([hidden])", ".gtp-chat"], "forecast": [".gtp-chat"], "locked": ["#sa-pane-access:not([hidden])"],
+             "app": ["#sa-tabs:not([hidden])", cfg.get("landmark", ".gtp-chat")], "forecast": [cfg.get("landmark", ".gtp-chat")], "locked": ["#sa-pane-access:not([hidden])"],
              "access": ["[data-plan-state].is-licensed"], "more": ["#sa-pane-more:not([hidden])", "[data-affiliate-link]"]}[scenario]
     for sel in marks:
         if not page.query_selector(sel):
@@ -89,7 +89,28 @@ def tap(page, text, timeout=20000):
     page.locator("#sa-pane-app .gtp-kb[data-live] .gtp-key", has_text=text).last.click(timeout=timeout)
 
 
-def drive(page, scenario):
+def drive_steps(page, scenario, cfg):
+    """A member whose app is not the chat names its own recipe in member.json "render": steps (a list of selectors to
+    click) for forecast and locked, and "result" (wait, see, within) for the answer that must be whole on screen."""
+    for sel in cfg["steps"][scenario]:
+        page.locator(sel).first.click(timeout=20000)
+        page.wait_for_timeout(500)
+    if scenario == "locked":
+        page.wait_for_timeout(400)
+        return []
+    res = cfg["result"]
+    page.wait_for_selector(res["wait"], timeout=60000)
+    page.wait_for_timeout(1500)
+    hidden = page.evaluate("""([see, within]) => {
+        const a = document.querySelector(see).getBoundingClientRect();
+        const b = document.querySelector(within).getBoundingClientRect();
+        return Math.max(0, b.top - a.top, a.bottom - b.bottom); }""", [res["see"], res["within"]])
+    return ["the forecast's direction is %dpx outside its pane" % hidden] if hidden > 1 else []
+
+
+def drive(page, scenario, cfg):
+    if scenario in ("forecast", "locked") and cfg.get("steps"):
+        return drive_steps(page, scenario, cfg)
     if scenario in ("forecast", "locked"):
         tap(page, "Get forecast")
         page.wait_for_timeout(900)
@@ -162,10 +183,10 @@ def main():
                     page.goto("%s/app/index.html?system=%s" % (site, theme))
                     page.wait_for_timeout(700)
                     try:
-                        problems = drive(page, scenario)
+                        problems = drive(page, scenario, m.get("render", {}))
                     except Exception as e:  # a missing key or a read that never landed
                         problems = ["could not drive %s: %s" % (scenario, str(e).splitlines()[0])]
-                    problems += check(page, errors, scenario)
+                    problems += check(page, errors, scenario, m.get("render", {}))
                     shot = os.path.join(out, "%s-%s-%s.png" % (size, scenario, theme))
                     page.screenshot(path=shot)
                     status = "ok" if not problems else "FAIL"
