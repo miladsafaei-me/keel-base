@@ -36,6 +36,12 @@ brand.json fields:
                      Edge strip, run when a listing declares signal_only
   mobile_repo        where the brand's Android apps live (VERSIONS.md says so)
   versions_note      a paragraph VERSIONS.md carries under its layout section
+  app                not read by these tools: the values a member's config.js
+                     takes (site, signal and licence endpoints, landing,
+                     sign-up and risk URLs, key page and prefix, support
+                     contacts), read by the keel-kit signal-extension skill
+  _open              not read by these tools: what the site still lacks
+                     before a member can ship
 
 Usage: brand.py root | brand.py get <field>
 """
