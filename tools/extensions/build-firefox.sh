@@ -106,7 +106,7 @@ CHROME_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])
 python3 "$TOOLS/inventory.py" guard "$OUT" "$CHROME_VERSION"
 
 mkdir -p "$OUT"
-for f in "${SHARED[@]}"; do cp "$SRC/$f" "$OUT/$f"; done
+for f in "${SHARED[@]}"; do mkdir -p "$(dirname "$OUT/$f")"; cp "$SRC/$f" "$OUT/$f"; done
 rm -rf "$OUT/icons" && cp -r "$SRC/icons" "$OUT/icons"
 rm -rf "$OUT/tests"; [ -d "$SRC/tests" ] && cp -r "$SRC/tests" "$OUT/tests"
 [ -f "$SRC/README.md" ] && cp "$SRC/README.md" "$OUT/README.md"

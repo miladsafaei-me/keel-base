@@ -74,7 +74,7 @@ mapfile -t SHARED < <(python3 "$TOOLS/manifest-files.py" "$SRC/manifest.json")
 mkdir -p "$OUT"
 KEEP=()
 for f in "${SHARED[@]}"; do
-  if [ -f "$SRC/$f" ]; then cp "$SRC/$f" "$OUT/$f"; KEEP+=("$f"); fi
+  if [ -f "$SRC/$f" ]; then mkdir -p "$(dirname "$OUT/$f")"; cp "$SRC/$f" "$OUT/$f"; KEEP+=("$f"); fi
 done
 cp "$SRC/manifest.json" "$OUT/manifest.json"
 rm -rf "$OUT/icons" && cp -r "$SRC/icons" "$OUT/icons"

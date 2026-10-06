@@ -78,10 +78,31 @@ def popup_assets(zf):
     return out
 
 
+_CSS_URL = re.compile(r"""url\(\s*['"]?([^'")]+)['"]?\s*\)""")
+
+
+def stylesheet_assets(zf, sheets):
+    """What the popup's stylesheets load by a relative url(): a font, an image."""
+    out = []
+    for sheet in sheets:
+        if not sheet.endswith(".css") or sheet not in zf.namelist():
+            continue
+        css = zf.read(sheet).decode("utf-8", "replace")
+        for ref in _CSS_URL.findall(css):
+            ref = ref.split("?")[0].split("#")[0].strip()
+            if not ref or ":" in ref or ref.startswith("/"):
+                continue
+            ref = os.path.normpath(os.path.join(os.path.dirname(sheet), ref))
+            if ref not in out:
+                out.append(ref)
+    return out
+
+
 def main(path):
     with zipfile.ZipFile(path) as zf:
         have = set(zf.namelist())
-        need = required(zf) + ["popup.html"] + popup_assets(zf)
+        loads = popup_assets(zf)
+        need = required(zf) + ["popup.html"] + loads + stylesheet_assets(zf, loads)
         missing, seen = [], set()
         for f in need:
             if f not in have and f not in seen:

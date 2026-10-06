@@ -28,6 +28,46 @@ import brand  # noqa: E402
 
 # importScripts("a.js", "b.js") with either quote style, on one line.
 _IMPORT_SCRIPTS = re.compile(r"""importScripts\s*\(([^)]*)\)""")
+# src="x.js" / href="x.css" in the popup, and url(x) in the stylesheets it loads.
+_HTML_ASSET = re.compile(r"""(?:src|href)\s*=\s*['"]([^'"]+)['"]""")
+_CSS_URL = re.compile(r"""url\(\s*['"]?([^'")]+)['"]?\s*\)""")
+
+
+def _local(ref):
+    """A path inside the build, or None for a URL, an absolute path, a fragment or data."""
+    ref = ref.split("?")[0].split("#")[0].strip()
+    if not ref or ":" in ref or ref.startswith("/"):
+        return None
+    return ref
+
+
+def popup_loads(build_dir):
+    """Every file popup.html loads by a relative path, and every file those stylesheets
+    load, in order. icons/ is left out: the packagers ship that folder whole. A popup
+    built from a site's own app keeps its stylesheet, fonts and scripts in a folder
+    beside it, and the manifest names none of them."""
+    try:
+        html = open(os.path.join(build_dir, "popup.html"), encoding="utf-8").read()
+    except OSError:
+        return []
+    out = []
+    for ref in _HTML_ASSET.findall(html):
+        ref = _local(ref)
+        if not ref or ref.startswith("icons/") or ref in out:
+            continue
+        out.append(ref)
+        if ref.endswith(".css"):
+            try:
+                css = open(os.path.join(build_dir, ref), encoding="utf-8").read()
+            except OSError:
+                continue
+            for url in _CSS_URL.findall(css):
+                url = _local(url)
+                if url:
+                    url = os.path.normpath(os.path.join(os.path.dirname(ref), url))
+                    if not url.startswith("icons/") and url not in out:
+                        out.append(url)
+    return out
 
 
 def _imported_by(worker_path):
@@ -71,6 +111,7 @@ def shipped(manifest_path, background_first=False):
     # manifest never names it — but it is the whole UI. The logo's file name is
     # the repo's own (brand.json logo_file).
     files += ["popup.html", "popup.css", "popup.js", brand.LOGO_FILE]
+    files += popup_loads(os.path.dirname(manifest_path))
 
     out, seen = [], set()
     for f in files:
