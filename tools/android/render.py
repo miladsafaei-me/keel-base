@@ -20,7 +20,8 @@ target under 44px. The forecast scenario also fails when the forecast's directio
 
 Usage: render.py <slug> [--sizes phone,tablet] [--scenarios gate,app] [--themes light,dark] [--out DIR] [--dpr 2]
 Sizes: phone 360x780, phone-l 412x915, tablet 768x1024, tablet-l 1280x800, play 360x640 (at --dpr 3 that is the
-1080x1920 a Google Play phone screenshot takes).
+1080x1920 a Google Play phone screenshot takes). The cover-* sizes have the aspect of the screen inside the
+device frame of a store cover (cover-shots.py).
 """
 import argparse
 import json
@@ -34,7 +35,8 @@ from playwright.sync_api import sync_playwright
 import mobile
 
 SIZES = {"phone": (360, 780), "phone-l": (412, 915), "tablet": (768, 1024), "tablet-l": (1280, 800), "play": (360, 640),
-         "play-7": (600, 960), "play-10": (800, 1280)}
+         "play-7": (600, 960), "play-10": (800, 1280),
+         "cover-phone": (412, 887), "cover-7": (1024, 798), "cover-10": (1280, 850)}
 SCENARIOS = ["gate", "app", "forecast", "locked", "access", "more"]
 INSETS = {"top": int(os.environ.get("INSET_TOP", 24)), "bottom": int(os.environ.get("INSET_BOTTOM", 24)), "left": 0, "right": 0}
 DAY = 24 * 3600 * 1000
