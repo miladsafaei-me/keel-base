@@ -9,7 +9,9 @@ Writes <family>/<slug>/art/emblem-v1.png ... -vN.png. Look at each, copy the cho
 "emblem": "art/emblem.png" in member.json; tools/sync-from-site.py then cuts its white ground and builds every icon
 from it.
 
-Usage: set -a; . ~/www/signalbots/.env; set +a; draw-emblem.py <slug> [--variants 3]
+Usage: set -a; . <key-env>; set +a; draw-emblem.py <slug> [--variants 3]
+<key-env> is ~/www/signalbots/.env for SignalBots, Autotradingbots and Broker.best
+only, and ~/www/revenika/.env for every other site (rule in ~/.claude/CLAUDE.md).
 """
 import argparse
 import base64
