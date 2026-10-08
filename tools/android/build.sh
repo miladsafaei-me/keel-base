@@ -5,7 +5,9 @@
 #
 # Copies the site's app in (sync-from-site.py), builds both packages with the upload key named in brand.json, runs every
 # gate (check.py), and copies them to <family>/<slug>/release/<slug>-android-<version>.{aab,apk}, removing older builds
-# there. The packages stay out of git. Upload the .aab to Google Play; the .apk is for testing on a phone.
+# there. Last, it zips the member's whole directory (everything but release/ itself) into
+# release/<slug>-android-<version>.zip beside them. The packages stay out of git. Upload the .aab to Google Play; the .apk
+# is for testing on a phone; the .zip is the app's complete directory in one file.
 set -euo pipefail
 
 slug="${1:?usage: build.sh <slug>}"
@@ -51,8 +53,25 @@ python3 "$tools/check.py" "$slug" --apk "$apk" --aab "$aab"
 
 out="$mdir/release"
 mkdir -p "$out"
-find "$out" -maxdepth 1 -type f \( -name '*.aab' -o -name '*.apk' \) -delete
+find "$out" -maxdepth 1 -type f \( -name '*.aab' -o -name '*.apk' -o -name '*.zip' \) -delete
 cp "$aab" "$out/$slug-android-$version.aab"
 cp "$apk" "$out/$slug-android-$version.apk"
+
+echo "== zip the member's directory"
+python3 - "$mdir" "$out/$slug-android-$version.zip" <<'EOF'
+import os, sys, zipfile
+mdir, dest = sys.argv[1], sys.argv[2]
+top = os.path.basename(mdir)
+count = 0
+with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+    for here, dirs, files in os.walk(mdir):
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__" and os.path.join(here, d) != os.path.join(mdir, "release"))
+        rel = os.path.relpath(here, mdir)
+        z.write(here, os.path.normpath(os.path.join(top, rel)))
+        for f in sorted(files):
+            z.write(os.path.join(here, f), os.path.normpath(os.path.join(top, rel, f)))
+            count += 1
+print("zipped %d files into %s" % (count, dest))
+EOF
 ls -la "$out"
 echo "Built, not published: upload $out/$slug-android-$version.aab to Google Play."
