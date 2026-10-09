@@ -88,6 +88,10 @@ def scan():
         if parts and parts[0] in IGNORED_TOP:
             dirnames[:] = []
             continue
+        if len(parts) == 3 and parts[0] in layout.FAMILIES and parts[2] == "screenshots":
+            # Raw store-cover shots (tools/flow-shots.py): pictures and a zip of them, never a build.
+            dirnames[:] = []
+            continue
         if len(parts) == 1 and parts[0] not in layout.FAMILIES:
             problems.append("unknown top-level folder: %s/ (families are %s)"
                             % (r, ", ".join(layout.FAMILIES)))
