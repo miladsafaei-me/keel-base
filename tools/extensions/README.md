@@ -54,4 +54,6 @@ is the smallest complete example.
 | `inventory.py` | One build per folder, `VERSIONS.md`, the version guard |
 | `newest-member.py` | The family's most recently built member, the model for the next |
 | `smoke-popup.py` | Runs a popup in headless Chromium against a stubbed `chrome` API |
+| `flow-shots.py` | Every state in an extension's `shots.json`, the real popup against the live site, into `<extension>/covers/screenshots/` |
+| `store-covers.py` | The designed 1280x800 store covers of the scenes in an extension's `covers.json`, into `<extension>/covers/raw/` and `final/`, plus `covers-<slug>.zip` |
 | `firefox-shim.js` | Copied into every Firefox build |

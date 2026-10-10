@@ -39,13 +39,14 @@ Actions, run in order on a fresh page:
   {"wait": 500}                   milliseconds
   {"wait_for": css}               wait until visible (30 s)
 
-Outputs, in <extension>/screenshots/:
-  popup/NN-name.png   the popup alone, dark, device scale 2, at the window size
-  store/NN-name.png   1280x800: the popup on a plain stage with a window shadow
-  index.txt           NN-name and title, one per line
+Outputs, in <extension>/covers/:
+  screenshots/NN-name.png   the popup alone, dark, device scale 2, at the window size
+  screenshots/index.txt     NN-name and title, one per line
+  store/NN-name.png         with --store only: 1280x800, the popup on a plain stage with a window shadow
+The designed store covers are made from these by store-covers.py.
 
 Usage:
-  flow-shots.py <extension-dir> [<extension-dir> ...] [--only name,name] [--no-store]
+  flow-shots.py <extension-dir> [<extension-dir> ...] [--only name,name] [--store]
 where <extension-dir> holds chrome/ and shots.json.
 Python: ~/.local/share/keel-render-venv/bin/python (playwright + PIL).
 """
@@ -307,22 +308,24 @@ def run_extension(browser, ext_dir, only, make_store):
     w = recipe.get("window") or {}
     win = (w.get("width", cfg_win[0]), w.get("height", cfg_win[1]))
     stage = recipe.get("stage") or stage_colour(chrome_dir)
-    out = os.path.join(ext_dir, "screenshots")
-    for sub in ("popup", "store"):
-        os.makedirs(os.path.join(out, sub), exist_ok=True)
+    out = os.path.join(ext_dir, "covers", "screenshots")
+    store_out = os.path.join(ext_dir, "covers", "store")
+    dirs = [out] + ([store_out] if make_store else [])
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
     states = recipe["states"]
     failures = 0
     if not only:  # a full run owns the folders: drop shots of states that no longer exist
         keep = {"%02d-%s.png" % (i, st["name"]) for i, st in enumerate(states, 1)}
-        for sub in ("popup", "store"):
-            for old in os.listdir(os.path.join(out, sub)):
+        for d in dirs:
+            for old in os.listdir(d):
                 if old.endswith(".png") and old not in keep:
-                    os.remove(os.path.join(out, sub, old))
+                    os.remove(os.path.join(d, old))
     for i, state in enumerate(states, 1):
         if only and state["name"] not in only:
             continue
         fname = "%02d-%s.png" % (i, state["name"])
-        popup_path = os.path.join(out, "popup", fname)
+        popup_path = os.path.join(out, fname)
         try:
             problems, relay_log = capture(browser, chrome_dir, site, store_key, prefix, win, states, state, popup_path)
         except Exception as exc:
@@ -330,7 +333,7 @@ def run_extension(browser, ext_dir, only, make_store):
             failures += 1
             continue
         if make_store:
-            store_image(popup_path, os.path.join(out, "store", fname), stage)
+            store_image(popup_path, os.path.join(store_out, fname), stage)
         reads = [r for r in relay_log if "/s-api/" in r]
         print("%s %s/%s  api: %s" % ("WARN" if problems else "ok  ", os.path.basename(ext_dir), fname,
                                      ", ".join(r.split("/s-api/")[0].strip() + " " + r.split("/s-api/")[1][:30] for r in reads) or "-"))
@@ -344,13 +347,15 @@ def run_extension(browser, ext_dir, only, make_store):
 
 
 def main(argv):
-    only, make_store, dirs = None, True, []
+    only, make_store, dirs = None, False, []
     args = iter(argv)
     for a in args:
         if a == "--only":
             only = set(next(args).split(","))
         elif a.startswith("--only="):
             only = set(a.split("=", 1)[1].split(","))
+        elif a == "--store":
+            make_store = True
         elif a == "--no-store":
             make_store = False
         else:
