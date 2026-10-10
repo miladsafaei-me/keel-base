@@ -56,12 +56,10 @@ def texts(path):
     return out
 
 
-def listing_of(path):
-    """The product's store-listing.md, from <family>/<slug>/<browser>[/x.zip]."""
+def listings_of(path):
+    """The product's store listing texts, from <family>/<slug>/<browser>[/x.zip]."""
     folder = os.path.dirname(path) if path.endswith(".zip") else path
-    product = os.path.dirname(os.path.abspath(folder))
-    listing = os.path.join(product, "store-listing.md")
-    return listing if os.path.isfile(listing) else None
+    return layout.listing_texts(os.path.dirname(os.path.abspath(folder)))
 
 
 def hits(rx, name, text):
@@ -76,9 +74,8 @@ def check(path, rx):
     found = []
     for name, text in sorted(texts(path).items()):
         found += list(hits(rx, name, text))
-    listing = listing_of(path)
-    if listing:
-        found += list(hits(rx, "store-listing.md", open(listing, encoding="utf-8").read()))
+    for name, text in sorted(listings_of(path).items()):
+        found += list(hits(rx, name, text))
     return found
 
 

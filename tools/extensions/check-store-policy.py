@@ -30,7 +30,8 @@ What it checks, for one build folder or package:
     4. no background or content script holds a partner URL, reads the
        affiliate config, or opens an external URL by itself - a partner link
        opens only when the user taps it;
-    5. the store listing text (<family>/<slug>/store-listing.md) opens its
+    5. the store listing text (<family>/<slug>/store-listing.md, or
+       store-listing.en.md inside <slug>-store-listings.zip) opens its
        Description with an "Affiliate disclosure" paragraph that mentions the
        commission, inside the first 800 characters.
 
@@ -179,13 +180,13 @@ def check(path):
                 partners.setdefault(host.lower(), set()).add(name)
     has_partners = bool(partners)
 
-    listing_path = os.path.join(ROOT, family, slug, "store-listing.md")
+    listing = layout.listing_text(os.path.join(ROOT, family, slug))
     desc = None
-    if not os.path.isfile(listing_path):
-        problems.append("no store listing text: %s/%s/store-listing.md (template in docs/store-policy.md)"
-                        % (family, slug))
+    if listing is None:
+        problems.append("no store listing text: %s/%s/store-listing.md or store-listing.en.md in "
+                        "%s-store-listings.zip (template in docs/store-policy.md)" % (family, slug, slug))
     else:
-        desc = description(open(listing_path, encoding="utf-8").read())
+        desc = description(listing)
         if not desc:
             problems.append("store-listing.md has no '## Description' section")
 
@@ -254,7 +255,8 @@ def staged_builds():
                 and parts[3] == "manifest.json":
             if _version(_git("show", ":" + p)) != _version(_git("show", "HEAD:" + p)):
                 out.add(os.path.join(ROOT, *parts[:3]))
-        elif len(parts) == 3 and parts[0] in layout.FAMILIES and parts[2] == "store-listing.md":
+        elif len(parts) == 3 and parts[0] in layout.FAMILIES and parts[2] in (
+                "store-listing.md", parts[1] + "-store-listings.zip"):
             for browser in layout.BROWSERS:
                 d = os.path.join(ROOT, parts[0], parts[1], browser)
                 if os.path.isfile(os.path.join(d, "manifest.json")):

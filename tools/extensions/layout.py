@@ -3,6 +3,9 @@
 
     <family>/<slug>/<browser>/                                the build
     <family>/<slug>/<browser>/<slug>-<browser>-<version>.zip  its one package
+    <family>/<slug>/<slug>-store-listings.zip                 its store text, one
+                                                              store-listing.<lang>.md
+                                                              per language, en first
 
 Every product sits in one folder, and its builds for each browser sit inside
 it, so everything about one extension is in one place. The family says what
@@ -18,7 +21,9 @@ Usage (for the shell scripts):
   layout.py package <slug> <browser> <version>   print the package file name
 """
 import os
+import re
 import sys
+import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import brand  # noqa: E402
@@ -52,6 +57,39 @@ def build_dir(slug, browser):
     """The folder a build of <slug> for <browser> lives in (it may not exist yet)."""
     family = family_of(slug)
     return os.path.join(ROOT, family, slug, browser) if family else None
+
+
+def listings_zip(product_dir):
+    """The zip that holds a product's store text, one store-listing.<lang>.md per language."""
+    return os.path.join(product_dir, os.path.basename(os.path.normpath(product_dir)) + "-store-listings.zip")
+
+
+def listing_texts(product_dir):
+    """Every store listing text of a product, as {name: text}.
+
+    A product keeps its listings either as a loose store-listing.md (the older
+    form) or inside <slug>-store-listings.zip; both are read when both exist."""
+    out = {}
+    loose = os.path.join(product_dir, "store-listing.md")
+    if os.path.isfile(loose):
+        out["store-listing.md"] = open(loose, encoding="utf-8").read()
+    z = listings_zip(product_dir)
+    if os.path.isfile(z):
+        with zipfile.ZipFile(z) as zf:
+            for n in zf.namelist():
+                if re.fullmatch(r"store-listing(\.[a-z-]+)?\.md", os.path.basename(n)):
+                    out[n] = zf.read(n).decode("utf-8", "replace")
+    return out
+
+
+def listing_text(product_dir):
+    """The English store listing the policy checks read, or None."""
+    texts = listing_texts(product_dir)
+    for name in ("store-listing.md", "store-listing.en.md"):
+        for n, text in texts.items():
+            if os.path.basename(n) == name:
+                return text
+    return None
 
 
 def package_name(slug, browser, version):
