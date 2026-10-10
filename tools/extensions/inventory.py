@@ -104,7 +104,9 @@ def scan():
                 and not is_build_path(parts):
             problems.append("stray unpacked copy: %s/" % r)
         for f in filenames:
-            if f.endswith(".zip") and not build_here:
+            is_listings = len(parts) == 2 and parts[0] in layout.FAMILIES \
+                and os.path.join(dirpath, f) == layout.listings_zip(dirpath)
+            if f.endswith(".zip") and not build_here and not is_listings:
                 problems.append("stray package: %s" % rel(os.path.join(dirpath, f)))
             if f.endswith((".apk", ".aab")):
                 problems.append("Android app in the extensions repo: %s (it belongs in %s)"
