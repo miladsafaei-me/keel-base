@@ -116,6 +116,14 @@ def page(cover, job, w, h):
                  btag=int(22 * s), line=int(38 * s), sbh=int(40 * s), sbf=int(20 * s))
     feats = "".join('<div class="feat"><svg viewBox="0 0 24 24">%s</svg><b>%s</b><small>%s</small></div>'
                     % (ICONS[i], a, b) for i, a, b in cover.get("features", []))
+    if dev != "phone":
+        if dev == "browser":
+            pw, ph = cover["shot_size"]
+            bw = min((h * .86 - 2 * v["wbar"] - 26 * s) * pw / ph, w * .5)
+            col = w - max(bw + 120 * s, w * .36) - w * .035 - w * .07
+        else:
+            col = w - (w * .555 + 68 * s) - w * .045 - w * .07
+        v["h1"] = min(v["h1"], int(col / (.56 * max(len(t) for t in cover["title"]))))
     title = "".join('<span class="%s">%s</span>' % ("acc" if n % 2 else "", t) for n, t in enumerate(cover["title"]))
     brand = ('<div class="brand"><img src="%s" alt=""><div><b>%s</b><i>%s</i></div></div>'
              % (job["_logo"], job["name"], job["badge"]))
@@ -140,13 +148,15 @@ def page(cover, job, w, h):
         body += '<div class="foot" style="bottom:%dpx"><p class="line" style="padding:0 %dpx;margin-bottom:%dpx">%s</p><div class="rule"></div></div>' % (60 * s, 90 * s, 26 * s, cover["line"])
     elif dev == "browser":
         pw, ph = cover["shot_size"]
-        wx, wy, ww, wh = w * .43, h * .07, w * .54, h * .86
+        wy, wh = h * .07, h * .86
         top = wy + 2 * v["wbar"] + 8 * s
         bh = wy + wh - top - 18 * s
         bw = bh * pw / ph
-        if bw > ww - 40 * s:
-            bw = ww - 40 * s
+        if bw > w * .5:
+            bw = w * .5
             bh = bw * ph / pw
+        ww = max(bw + 120 * s, w * .36)
+        wx = w - ww - w * .035
         bx = wx + ww - bw - 22 * s
         body = ('<div class="glow g1" style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"></div>'
                 '<div class="glow g2" style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"></div>'
