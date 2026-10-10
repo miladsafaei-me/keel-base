@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every state of an app as a screenshot, for the designer's store covers, into <family>/<slug>/screenshots/flow/.
+"""Every state of an app as a screenshot, for the designer's store covers, into <family>/<slug>/covers/screenshots/.
 
 cover-shots.py makes the five headline scenes. This makes the rest: each tab, each step of the chat, each open
 dropdown or list, each locked and licensed state. The states are the member's own, listed in <slug>/shots.json:
@@ -24,8 +24,8 @@ dropdown or list, each locked and licensed state. The states are the member's ow
     ["eval", js]               run a JavaScript expression in the page (to nudge a state the app should reach by itself)
     ["wait_now", css]          wait for a selector with no settling pause (a state that passes quickly, like a progress bar)
 
-Files: flow/{phone,tablet 7,tablet 10}/NN-name.png at the same sizes as cover-shots.py (482x1038, 1027x800,
-1404x932), dark theme, no system bars, rendered at double density and scaled to the exact size. Also flow/index.txt,
+Files: covers/screenshots/{phone,tablet 7,tablet 10}/NN-name.png at the same sizes as cover-shots.py (482x1038, 1027x800,
+1404x932), dark theme, no system bars, rendered at double density and scaled to the exact size. Also covers/screenshots/index.txt,
 the list of what each number is. A step that cannot be driven fails loudly; a picture of the wrong state is never kept.
 
 Usage: flow-shots.py <slug> [--theme dark|light] [--only name,name]
@@ -99,7 +99,7 @@ def main():
     site = brand["app"]["site"].rstrip("/")
     recipe = json.load(open(os.path.join(mdir, "shots.json")))["shots"]
     only = set(filter(None, args.only.split(",")))
-    out = os.path.join(mdir, "screenshots", "flow")
+    out = os.path.join(mdir, "covers", "screenshots")
     if not only:
         shutil.rmtree(out, ignore_errors=True)
     failures = 0

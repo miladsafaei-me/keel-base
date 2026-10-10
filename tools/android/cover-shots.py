@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Raw app screenshots for the designer's store covers, into <family>/<slug>/screenshots/.
+"""Raw app screenshots for the designer's store covers, into <family>/<slug>/covers/raw/.
 
 A store cover (the picture with a headline and a device frame) carries the app's screenshot inside the frame's
 screen, so the screenshot is sized to that screen, not to the cover. The sizes are measured from the designed
@@ -12,6 +12,9 @@ samples in <family>/screenshots/ (screenshot-sizes.html); the cover sizes themse
 The five scenes, the same on every device: 1 licence gate, 2 the chat, 3 a forecast, 4 Access, 5 More. Dark theme
 (the covers are dark), no system bars, the real app against the live signal engine. Each file is rendered at
 double density and scaled to the exact size.
+
+A member with its own covers.json picks its cover shots from every state instead (store-covers.py fills
+covers/raw/), so this skips it.
 
 Usage: cover-shots.py <slug> [--theme dark|light]
 """
@@ -36,7 +39,10 @@ def main():
     ap.add_argument("--theme", default="dark")
     args = ap.parse_args()
     m, mdir = mobile.member(args.slug)
-    out = os.path.join(mdir, "screenshots")
+    if os.path.isfile(os.path.join(mdir, "covers.json")):
+        print("covers.json picks the cover shots: run store-covers.py %s" % args.slug)
+        return
+    out = os.path.join(mdir, "covers", "raw")
     shutil.rmtree(out, ignore_errors=True)
     for folder, size, target in SETS:
         tmp = tempfile.mkdtemp(prefix="sa-cover-")

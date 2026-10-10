@@ -8,7 +8,7 @@
   tablet10-<n>-<scene>.png   1600x2560, for 10-inch tablets
   icon-512.png               written by sync-from-site.py, not here
 
-It also runs cover-shots.py, so every run leaves <slug>/screenshots/ (raw shots sized for the designer's covers) fresh.
+It also runs cover-shots.py, so every run leaves <slug>/covers/raw/ (raw shots sized for the covers) fresh.
 
 Screenshots come from tools/render.py, so they are the real app against the live signal engine, never a mock.
 
