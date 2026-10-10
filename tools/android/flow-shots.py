@@ -44,17 +44,35 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import mobile  # noqa: E402
 import render  # noqa: E402
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
+import weekday  # noqa: E402
+
+SHIFT = weekday.shift_seconds()  # the page runs on the next weekday, so the real market reads open
+
 SETS = [("phone", "cover-phone", (482, 1038)), ("tablet 7", "cover-7", (1027, 800)), ("tablet 10", "cover-10", (1404, 932))]
 
 
 def store_for(kind):
     if kind == "gate":
         return None
+    st = render.state("access" if kind == "licensed" else "app")
     if kind == "ended":
-        st = render.state("app")
         st["trialStart"] -= 30 * render.DAY
-        return st
-    return render.state("access" if kind == "licensed" else "app")
+    st["trialStart"] += SHIFT * 1000
+    if st.get("license"):
+        st["license"]["checkedAt"] += SHIFT * 1000
+    return st
+
+
+def shifted_api(route, request):
+    """A live API answer with its timestamps moved to the page's weekday clock."""
+    resp = route.fetch()
+    try:
+        body = json.dumps(weekday.shift_json(resp.json(), SHIFT))
+    except Exception:
+        route.fulfill(response=resp)
+        return
+    route.fulfill(response=resp, body=body, content_type="application/json")
 
 
 def act(page, a):
@@ -115,6 +133,9 @@ def main():
                 ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=2, is_mobile=True, has_touch=True,
                                           color_scheme=args.theme, user_agent="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
                 ctx.route(site + "/app/**", render.serve(mdir))
+                if SHIFT:
+                    ctx.route(site + "/s-api/**", shifted_api)
+                    ctx.add_init_script(weekday.init_script(SHIFT))
                 for part in shot.get("block", []):
                     ctx.route("**/*" + part + "*", lambda r: r.abort())
                 if shot.get("store") == "licensed" or shot.get("stub_licence"):

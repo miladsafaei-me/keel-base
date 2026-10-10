@@ -63,6 +63,11 @@ from urllib.parse import urlparse
 from PIL import Image, ImageDraw, ImageFilter
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
+import weekday  # noqa: E402
+
+SHIFT = weekday.shift_seconds()  # the popup runs on the next weekday, so the real market reads open
+
 SCALE = 2
 STORE_SIZE = (1280, 800)
 STORE_POPUP_HEIGHT = 720
@@ -156,7 +161,7 @@ def stage_colour(chrome_dir):
 
 
 def seed_for(store_name, store_key, prefix, extra):
-    now = int(time.time() * 1000)
+    now = int(time.time() * 1000) + SHIFT * 1000
     store = {"trialStart": None, "license": None, "signedOut": False, "notice": None}
     expires = "2027-12-31T00:00:00+00:00"
     if store_name == "ended":
@@ -189,7 +194,7 @@ def make_relay(log):
         except Exception:
             data = None
         log.append("%d %s" % (status, re.sub(r"key=[^&]+", "key=...", url)))
-        return {"ok": 200 <= status < 300, "status": status, "data": data}
+        return {"ok": 200 <= status < 300, "status": status, "data": weekday.shift_json(data, SHIFT)}
     return relay
 
 
@@ -265,6 +270,8 @@ def capture(browser, chrome_dir, site, store_key, prefix, win, states, state, ou
     page.on("pageerror", lambda e: problems.append("pageerror: %s" % e))
     page.on("console", lambda m: problems.append("console.error: %s" % m.text) if m.type == "error" else None)
     page.expose_function("__flow_relay", make_relay(relay_log))
+    if SHIFT:
+        page.add_init_script(weekday.init_script(SHIFT))
     page.add_init_script(STUB % {"seed": json.dumps(seed_for(store_name, store_key, prefix, state.get("store_extra")))})
     page.goto(site + "/__ext__/popup.html")
     page.wait_for_selector("[id$='-gate']:not([hidden]), [id$='-app']:not([hidden])", timeout=10000)
