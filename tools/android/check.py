@@ -7,7 +7,10 @@
   site      the bundled app is in step with the site (sync-from-site.py --check)
   package   the APK and the AAB are signed with the upload key, target the SDK Google Play requires, carry the member's
             application id and version, ask only for INTERNET
-  listing   store-listing.md has every field Google Play asks for, within its length limits, the disclosure first
+  listing   the store listing has every field Google Play asks for, within its length limits, the disclosure first.
+            It is a loose store-listing.md, or <slug>-store-listings.zip holding store-listing.<lang>.md per language:
+            store-listing.en.md carries every field, each other language the three Play translates (App name,
+            Short description, Full description), and each is held to the same limits
 
 Usage: check.py <slug> [--apk PATH --aab PATH]
 """
@@ -23,6 +26,22 @@ import mobile
 TARGET_SDK = 36
 SDK = os.path.expanduser(os.environ.get("ANDROID_HOME", "~/Android/Sdk"))
 LIMITS = {"App name": 30, "Short description": 80, "Full description": 4000}
+
+
+def listing_texts(mdir):
+    """Every store listing text of a member, as {name: text}: the loose store-listing.md and/or every
+    store-listing.<lang>.md inside <slug>-store-listings.zip."""
+    out = {}
+    loose = os.path.join(mdir, "store-listing.md")
+    if os.path.isfile(loose):
+        out["store-listing.md"] = open(loose, encoding="utf-8").read()
+    z = os.path.join(mdir, os.path.basename(os.path.normpath(mdir)) + "-store-listings.zip")
+    if os.path.isfile(z):
+        with zipfile.ZipFile(z) as zf:
+            for n in zf.namelist():
+                if re.fullmatch(r"store-listing(\.[a-z-]+)?\.md", os.path.basename(n)):
+                    out[os.path.basename(n)] = zf.read(n).decode("utf-8", "replace")
+    return out
 
 
 def build_tool(name):
@@ -42,7 +61,10 @@ def check_brand(brand, mdir, apk):
     bad = []
     roots = [os.path.join(mdir, "android", "assets"), os.path.join(mobile.ROOT, "shell")]
     files = [os.path.join(d, n) for r in roots for d, _, ns in os.walk(r) for n in ns if n.endswith((".html", ".js", ".css", ".json", ".xml"))]
-    files += [os.path.join(mdir, "store-listing.md")]
+    for name, text in sorted(listing_texts(mdir).items()):
+        hit = traces(text, brand)
+        if hit:
+            bad.append("%s names %s" % (name, ", ".join(hit)))
     for f in files:
         if os.path.isfile(f):
             hit = traces(open(f, encoding="utf-8", errors="replace").read(), brand)
@@ -105,28 +127,34 @@ def check_package(m, apk, aab):
 
 
 def listing_fields(text):
-    """Each "## Field" heading of store-listing.md and the first code block under it."""
+    """Each "## Field" heading of a listing and the first code block under it. A translated heading carries the
+    English field name in parentheses at its end ("## Полное описание (Full description)"); that name is the key."""
     fields = {}
     for head, body in re.findall(r"^## (.+?)\n(.*?)(?=^## |\Z)", text, re.S | re.M):
+        m = re.search(r"\(([^()]+)\)\s*$", head.strip())
+        key = m.group(1) if m and m.group(1) in LIMITS else head.strip()
         block = re.search(r"```\w*\n(.*?)\n```", body, re.S)
-        fields[head.strip()] = block.group(1) if block else body.strip()
+        fields[key] = block.group(1) if block else body.strip()
     return fields
 
 
 def check_listing(mdir):
-    path = os.path.join(mdir, "store-listing.md")
-    if not os.path.isfile(path):
-        return ["no store-listing.md"]
-    fields = listing_fields(open(path, encoding="utf-8").read())
+    texts = listing_texts(mdir)
+    if not texts:
+        return ["no store listing: store-listing.md, or store-listing.en.md in <slug>-store-listings.zip"]
+    if "store-listing.md" not in texts and "store-listing.en.md" not in texts:
+        return ["the listings zip has no store-listing.en.md"]
     bad = []
-    for field, limit in LIMITS.items():
-        body = fields.get(field, "")
-        if not body:
-            bad.append("store-listing.md has no %s" % field)
-        elif len(body) > limit:
-            bad.append("%s is %d characters; Google Play takes %d" % (field, len(body), limit))
-    if "Affiliate disclosure" not in fields.get("Full description", "")[:900]:
-        bad.append("the Full description does not open with its affiliate disclosure")
+    for name, text in sorted(texts.items()):
+        fields = listing_fields(text)
+        for field, limit in LIMITS.items():
+            body = fields.get(field, "")
+            if not body:
+                bad.append("%s has no %s" % (name, field))
+            elif len(body) > limit:
+                bad.append("%s: %s is %d characters; Google Play takes %d" % (name, field, len(body), limit))
+        if "Affiliate disclosure" not in fields.get("Full description", "")[:900]:
+            bad.append("%s: the Full description does not open with its affiliate disclosure" % name)
     return bad
 
 
