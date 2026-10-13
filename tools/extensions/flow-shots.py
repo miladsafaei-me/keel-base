@@ -64,6 +64,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
+import local_engine  # noqa: E402
 import weekday  # noqa: E402
 
 SHIFT = weekday.shift_seconds()  # the popup runs on the next weekday, so the real market reads open
@@ -180,6 +181,10 @@ def seed_for(store_name, store_key, prefix, extra):
 def make_relay(log):
     """Fetch a URL from the live site the way the background worker does."""
     def relay(url):
+        if local_engine.enabled() and "/s-api/binary-signal" in url:
+            status, data = local_engine.answer(url)
+            log.append("%d %s (local engine)" % (status, re.sub(r"key=[^&]+", "key=...", url)))
+            return {"ok": 200 <= status < 300, "status": status, "data": weekday.shift_json(data, SHIFT)}
         req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": UA})
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:

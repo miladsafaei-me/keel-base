@@ -45,6 +45,7 @@ import mobile  # noqa: E402
 import render  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
+import local_engine  # noqa: E402
 import weekday  # noqa: E402
 
 SHIFT = weekday.shift_seconds()  # the page runs on the next weekday, so the real market reads open
@@ -136,6 +137,8 @@ def main():
                 if SHIFT:
                     ctx.route(site + "/s-api/**", shifted_api)
                     ctx.add_init_script(weekday.init_script(SHIFT))
+                if local_engine.enabled():
+                    ctx.route(site + "/s-api/binary-signal*", local_engine.route(SHIFT, weekday.shift_json))
                 for part in shot.get("block", []):
                     ctx.route("**/*" + part + "*", lambda r: r.abort())
                 if shot.get("store") == "licensed" or shot.get("stub_licence"):

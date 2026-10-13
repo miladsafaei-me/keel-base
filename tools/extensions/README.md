@@ -57,3 +57,11 @@ is the smallest complete example.
 | `flow-shots.py` | Every state in an extension's `shots.json`, the real popup against the live site, into `<extension>/covers/screenshots/` |
 | `store-covers.py` | The designed 1280x800 store covers of the scenes in an extension's `covers.json`, into `<extension>/covers/raw/` and `final/`, plus `covers-<slug>.zip` |
 | `firefox-shim.js` | Copied into every Firefox build |
+
+## When the site is blocked from this machine
+
+Some networks block a brand's site from the laptop that takes the pictures. Set `KEEL_SIGNAL_ENGINE` to the site's
+engine module (for autotradingbots.ai, `backend/core/services/binary_signal.py` in the site repo) and the screenshot
+tools (`render.py`, both `flow-shots.py`, and the tools that call them) answer `/s-api/binary-signal` from that
+module instead of the network (`../covers/local_engine.py`). It is the file the server runs, so the reads match; a
+fast expiry without a key is refused with 403, as on the server. Unset, every read goes live.

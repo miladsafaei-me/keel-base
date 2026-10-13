@@ -32,6 +32,9 @@ import time
 
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
+import local_engine  # noqa: E402
+
 import mobile
 
 SIZES = {"phone": (360, 780), "phone-l": (412, 915), "tablet": (768, 1024), "tablet-l": (1280, 800), "play": (360, 640),
@@ -167,6 +170,8 @@ def main():
                     ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=args.dpr, is_mobile=True, has_touch=True,
                                               color_scheme=theme, user_agent="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
                     ctx.route(site + "/app/**", serve(mdir))
+                    if local_engine.enabled():
+                        ctx.route(site + "/s-api/binary-signal*", local_engine.route())
                     if scenario == "access":
                         ctx.route(site + "/s-api/license?*", lambda r, q: r.fulfill(status=200, content_type="application/json",
                                   body=json.dumps({"licensed": True, "brokers": [], "expires_at": "2027-04-06T00:00:00Z"})))

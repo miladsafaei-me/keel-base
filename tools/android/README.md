@@ -88,3 +88,11 @@ optional `emblem` (`art/emblem.png`), `free_words`, `trial_days`, `contact_messa
 | `build.sh` | Sync, Gradle release bundle and APK, the gates, copy to `release/`, then zip the member's whole directory beside them |
 | `host/` | The native activity, manifest, themes and backup rules every app shares |
 | `setup-toolchain.sh` | The JDK, SDK, emulator and render venv |
+
+## When the site is blocked from this machine
+
+Some networks block a brand's site from the laptop that takes the pictures. Set `KEEL_SIGNAL_ENGINE` to the site's
+engine module (for autotradingbots.ai, `backend/core/services/binary_signal.py` in the site repo) and the screenshot
+tools (`render.py`, both `flow-shots.py`, and the tools that call them) answer `/s-api/binary-signal` from that
+module instead of the network (`../covers/local_engine.py`). It is the file the server runs, so the reads match; a
+fast expiry without a key is refused with 403, as on the server. Unset, every read goes live.
