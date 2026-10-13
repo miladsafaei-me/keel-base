@@ -67,7 +67,8 @@ A tool finds its repo from `$MOBILE_ROOT`, else from the `tools/` folder it was 
 ## member.json
 
 `slug`, `item` (licence item), `name`, `application_id` (never changes once on Play), `version_name`, `version_code`
-(raise it on every upload), `site` (`module`, `markup`, `scripts`, `logo`, `logo_ground`, optional `emblem_box`),
+(raise it on every upload), `site` (`module`, `markup`, `scripts`, `logo`, `logo_ground`, optional `emblem_box`, optional `archive`: other
+site paths the markup reads, archived beside `design/`),
 optional `emblem` (`art/emblem.png`), `free_words`, `trial_days`, `contact_message`, `tab_app` (`label`, `icon`),
 `tagline` and `eyebrow` (feature graphic).
 

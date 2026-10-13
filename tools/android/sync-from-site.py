@@ -45,10 +45,11 @@ SPLASH_EMBLEM_DP = 168
 LOGO_PX = (384, 168)
 
 
-def archive(site, ref, dest):
+def archive(site, ref, dest, extra=()):
+    """design/ at ref, plus any other site paths a member's markup reads (member.json site.archive)."""
     subprocess.run(["git", "-C", site, "fetch", "-q", "origin"], check=False)
     commit = subprocess.run(["git", "-C", site, "rev-parse", "--short", ref], capture_output=True, text=True, check=True).stdout.strip()
-    tar = subprocess.run(["git", "-C", site, "archive", ref, "design"], capture_output=True, check=True).stdout
+    tar = subprocess.run(["git", "-C", site, "archive", ref, "design", *extra], capture_output=True, check=True).stdout
     subprocess.run(["tar", "-x", "-C", dest], input=tar, check=True)
     return commit
 
@@ -223,7 +224,7 @@ def outputs(slug, ref):
     site = mobile.expand(brand["site_repo"])
     tmp = tempfile.mkdtemp(prefix="sa-sync-")
     try:
-        commit = archive(site, ref, tmp)
+        commit = archive(site, ref, tmp, m["site"].get("archive", ()))
         design = os.path.join(tmp, "design")
         src = os.path.join(design, "src")
         shell = (open(os.path.join(mobile.ROOT, "shell", "index.shell.html"), encoding="utf-8").read()
