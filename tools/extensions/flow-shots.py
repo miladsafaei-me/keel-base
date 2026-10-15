@@ -39,14 +39,16 @@ Actions, run in order on a fresh page:
   {"wait": 500}                   milliseconds
   {"wait_for": css}               wait until visible (30 s)
 
-Outputs, in <extension>/covers/:
-  screenshots/NN-name.png   the popup alone, dark, device scale 2, at the window size
-  screenshots/index.txt     NN-name and title, one per line
-  store/NN-name.png         with --store only: 1280x800, the popup on a plain stage with a window shadow
+Outputs, in <extension>/covers/, one folder per theme (owner, 2026-10-15: every screenshot ships in light and dark,
+and the two never share a folder):
+  screenshots/<theme>/NN-name.png   the popup alone, in that theme, device scale 2, at the window size
+  screenshots/<theme>/index.txt     NN-name and title, one per line
+  store/<theme>/NN-name.png         with --store only: 1280x800, the popup on a plain stage with a window shadow
 The designed store covers are made from these by store-covers.py.
 
 Usage:
-  flow-shots.py <extension-dir> [<extension-dir> ...] [--only name,name] [--store]
+  flow-shots.py <extension-dir> [<extension-dir> ...] [--only name,name] [--store] [--theme light|dark|both]
+--theme defaults to both.
 where <extension-dir> holds chrome/ and shots.json.
 Python: ~/.local/share/keel-render-venv/bin/python (playwright + PIL).
 """
@@ -85,7 +87,7 @@ STUB = """
   try { data = JSON.parse(localStorage.getItem("__flow_store") || "null"); } catch (e) { data = null; }
   if (!data) { data = { [KEY]: seed.store }; }
   const save = () => { try { localStorage.setItem("__flow_store", JSON.stringify(data)); } catch (e) {} };
-  try { localStorage.setItem("atb-theme", "dark"); } catch (e) {}
+  try { localStorage.setItem("atb-theme", seed.theme); } catch (e) {}
   save();
   const params = (s) => new URLSearchParams(s || "");
   window.chrome = {
@@ -161,7 +163,7 @@ def stage_colour(chrome_dir):
     return m.group(1) if m else "#031833"
 
 
-def seed_for(store_name, store_key, prefix, extra):
+def seed_for(store_name, store_key, prefix, extra, theme="dark"):
     now = int(time.time() * 1000) + SHIFT * 1000
     store = {"trialStart": None, "license": None, "signedOut": False, "notice": None}
     expires = "2027-12-31T00:00:00+00:00"
@@ -175,7 +177,7 @@ def seed_for(store_name, store_key, prefix, extra):
                             "expires_at": expires, "checkedAt": now}
     store.update(extra or {})
     return {"store": store, "storeKey": store_key, "prefix": prefix,
-            "placeholderKey": LICENCE_KEY, "expires": expires}
+            "placeholderKey": LICENCE_KEY, "expires": expires, "theme": theme}
 
 
 def make_relay(log):
@@ -263,10 +265,10 @@ def serve(route, chrome_dir):
         route.fulfill(status=404, body="")
 
 
-def capture(browser, chrome_dir, site, store_key, prefix, win, states, state, out_path):
+def capture(browser, chrome_dir, site, store_key, prefix, win, states, state, out_path, theme="dark"):
     store_name, actions = resolve(states, state)
     context = browser.new_context(viewport={"width": win[0], "height": win[1]}, device_scale_factor=SCALE,
-                                  color_scheme="dark", user_agent=UA)
+                                  color_scheme=theme, user_agent=UA)
     problems, relay_log = [], []
     context.route(site + "/__ext__/**", lambda r: serve(r, chrome_dir))
     context.route(re.compile(r"^(?!data:|blob:).*"), lambda r: r.fallback()
@@ -277,7 +279,7 @@ def capture(browser, chrome_dir, site, store_key, prefix, win, states, state, ou
     page.expose_function("__flow_relay", make_relay(relay_log))
     if SHIFT:
         page.add_init_script(weekday.init_script(SHIFT))
-    page.add_init_script(STUB % {"seed": json.dumps(seed_for(store_name, store_key, prefix, state.get("store_extra")))})
+    page.add_init_script(STUB % {"seed": json.dumps(seed_for(store_name, store_key, prefix, state.get("store_extra"), theme))})
     page.goto(site + "/__ext__/popup.html")
     page.wait_for_selector("[id$='-gate']:not([hidden]), [id$='-app']:not([hidden])", timeout=10000)
     for act in actions:
@@ -312,7 +314,7 @@ def store_image(popup_path, out_path, stage):
     canvas.convert("RGB").save(out_path)
 
 
-def run_extension(browser, ext_dir, only, make_store):
+def run_extension(browser, ext_dir, only, make_store, theme="dark"):
     ext_dir = os.path.abspath(ext_dir)
     chrome_dir = os.path.join(ext_dir, "chrome")
     recipe = json.loads(read(os.path.join(ext_dir, "shots.json")))
@@ -320,13 +322,19 @@ def run_extension(browser, ext_dir, only, make_store):
     w = recipe.get("window") or {}
     win = (w.get("width", cfg_win[0]), w.get("height", cfg_win[1]))
     stage = recipe.get("stage") or stage_colour(chrome_dir)
-    out = os.path.join(ext_dir, "covers", "screenshots")
-    store_out = os.path.join(ext_dir, "covers", "store")
+    out = os.path.join(ext_dir, "covers", "screenshots", theme)
+    store_out = os.path.join(ext_dir, "covers", "store", theme)
     dirs = [out] + ([store_out] if make_store else [])
     for d in dirs:
         os.makedirs(d, exist_ok=True)
     states = recipe["states"]
     failures = 0
+    if not only:  # the flat, dark-only layout before 2026-10-15 is replaced by the theme folders
+        for d in (os.path.dirname(out), os.path.dirname(store_out)):
+            if os.path.isdir(d):
+                for old in os.listdir(d):
+                    if old.endswith(".png") or old == "index.txt":
+                        os.remove(os.path.join(d, old))
     if not only:  # a full run owns the folders: drop shots of states that no longer exist
         keep = {"%02d-%s.png" % (i, st["name"]) for i, st in enumerate(states, 1)}
         for d in dirs:
@@ -339,15 +347,15 @@ def run_extension(browser, ext_dir, only, make_store):
         fname = "%02d-%s.png" % (i, state["name"])
         popup_path = os.path.join(out, fname)
         try:
-            problems, relay_log = capture(browser, chrome_dir, site, store_key, prefix, win, states, state, popup_path)
+            problems, relay_log = capture(browser, chrome_dir, site, store_key, prefix, win, states, state, popup_path, theme)
         except Exception as exc:
-            print("FAIL %s/%s: %s" % (os.path.basename(ext_dir), fname, str(exc).splitlines()[0]))
+            print("FAIL %s/%s/%s: %s" % (os.path.basename(ext_dir), theme, fname, str(exc).splitlines()[0]))
             failures += 1
             continue
         if make_store:
             store_image(popup_path, os.path.join(store_out, fname), stage)
         reads = [r for r in relay_log if "/s-api/" in r]
-        print("%s %s/%s  api: %s" % ("WARN" if problems else "ok  ", os.path.basename(ext_dir), fname,
+        print("%s %s/%s/%s  api: %s" % ("WARN" if problems else "ok  ", os.path.basename(ext_dir), theme, fname,
                                      ", ".join(r.split("/s-api/")[0].strip() + " " + r.split("/s-api/")[1][:30] for r in reads) or "-"))
         for p in problems:
             print("     " + p)
@@ -359,7 +367,7 @@ def run_extension(browser, ext_dir, only, make_store):
 
 
 def main(argv):
-    only, make_store, dirs = None, False, []
+    only, make_store, dirs, themes = None, False, [], ("light", "dark")
     args = iter(argv)
     for a in args:
         if a == "--only":
@@ -370,6 +378,9 @@ def main(argv):
             make_store = True
         elif a == "--no-store":
             make_store = False
+        elif a == "--theme" or a.startswith("--theme="):
+            t = next(args) if a == "--theme" else a.split("=", 1)[1]
+            themes = ("light", "dark") if t == "both" else (t,)
         else:
             dirs.append(a)
     if not dirs:
@@ -378,7 +389,8 @@ def main(argv):
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for d in dirs:
-            failures += run_extension(browser, d, only, make_store)
+            for theme in themes:
+                failures += run_extension(browser, d, only, make_store, theme)
         browser.close()
     return 1 if failures else 0
 

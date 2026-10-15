@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Draw a member's Google Play graphics into <family>/<slug>/play/.
+"""Draw a member's Google Play graphics into <family>/<slug>/play/light/ and play/dark/ (owner, 2026-10-15: every
+screenshot and cover ships in both themes, each in its own folder). In each:
 
   feature-graphic.png        1024x500, the banner at the top of the store page: the site's dark stage, the product's
-                             logo, its name and its one-line promise (member.json "tagline"), in the site's own font
-  phone-<n>-<scene>.png      1080x1920 phone screenshots (9:16), the app as the WebView draws it, light theme
+                             logo, its name and its one-line promise (member.json "tagline"), in the site's own font; the light one on a pale stage
+  phone-<n>-<scene>.png      1080x1920 phone screenshots (9:16), the app as the WebView draws it, in that theme
   tablet7-<n>-<scene>.png    1200x1920, for 7-inch tablets
   tablet10-<n>-<scene>.png   1600x2560, for 10-inch tablets
-  icon-512.png               written by sync-from-site.py, not here
+play/icon-512.png is written by sync-from-site.py, not here.
 
 It also runs cover-shots.py, so every run leaves <slug>/covers/raw/ (raw shots sized for the covers) fresh.
 
@@ -26,9 +27,10 @@ from playwright.sync_api import sync_playwright
 import mobile
 
 SCENES = ["forecast", "app", "gate", "access", "more"]
+THEMES = ("light", "dark")
 SETS = [("phone", "play", 3, SCENES), ("tablet7", "play-7", 2, ["forecast", "more"]), ("tablet10", "play-10", 2, ["forecast", "more"])]
 
-FEATURE = """<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8">
+FEATURE = """<!doctype html><html lang="en" data-theme="%(theme)s"><head><meta charset="utf-8">
 <link rel="stylesheet" href="site/site.css">
 <style>
   html, body { margin: 0; inline-size: 1024px; block-size: 500px; overflow: hidden; }
@@ -40,17 +42,24 @@ FEATURE = """<!doctype html><html lang="en" data-theme="dark"><head><meta charse
                  text-transform: uppercase; color: var(--accent-ink-on-inverse); }
   .fg__name { margin: 0; font-size: var(--text-7); font-weight: var(--weight-heavy); line-height: 1.05; letter-spacing: var(--tracking-tight); text-wrap: balance; }
   .fg__line { margin: var(--space-5) 0 0; font-size: var(--text-5); font-weight: var(--weight-semibold); line-height: 1.3; color: var(--ink-on-inverse-muted); }
+  %(light)s
 </style></head><body>
 <div class="fg"><img class="fg__logo" src="site/logo-384.webp" alt=""><div>
 <p class="fg__eyebrow">%(eyebrow)s</p><h1 class="fg__name">%(name)s</h1><p class="fg__line">%(tagline)s</p></div></div>
 </body></html>"""
 
 
-def feature(m, mdir, out):
+# The light banner: a pale stage with the site's ink, for the light set (owner, 2026-10-15).
+LIGHT_FEATURE = (".fg { background: radial-gradient(circle at 22% 50%, var(--surface-card), var(--surface-tint) 70%); color: var(--ink-strong); }"
+                 " .fg__eyebrow { color: var(--accent-ink); } .fg__line { color: var(--ink-muted); }")
+
+
+def feature(m, mdir, out, theme="dark"):
     assets = os.path.join(mdir, "android", "assets")
     page = os.path.join(assets, "_feature.html")
     with open(page, "w", encoding="utf-8") as f:
-        f.write(FEATURE % {"name": m["name"], "tagline": m["tagline"], "eyebrow": m.get("eyebrow", "Binary options signal app")})
+        f.write(FEATURE % {"name": m["name"], "tagline": m["tagline"], "eyebrow": m.get("eyebrow", "Binary options signal app"),
+                           "theme": theme, "light": LIGHT_FEATURE if theme == "light" else ""})
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
@@ -64,18 +73,18 @@ def feature(m, mdir, out):
     print(os.path.relpath(os.path.join(out, "feature-graphic.png"), mobile.ROOT))
 
 
-def screens(slug, out):
+def screens(slug, out, theme="light"):
     for prefix, size, dpr, scenes in SETS:
         tmp = tempfile.mkdtemp(prefix="sa-play-")
         try:
-            run = subprocess.run([sys.executable, os.path.join(mobile.ROOT, "tools", "render.py"), slug, "--sizes", size, "--themes", "light",
+            run = subprocess.run([sys.executable, os.path.join(mobile.ROOT, "tools", "render.py"), slug, "--sizes", size, "--themes", theme,
                                   "--scenarios", ",".join(scenes), "--dpr", str(dpr), "--no-insets", "--out", tmp], capture_output=True, text=True)
             print(run.stdout.strip())
             if run.returncode:
                 sys.exit("a screenshot scene failed; fix it before it goes to the store")
             for n, scene in enumerate(scenes, 1):
                 dest = os.path.join(out, "%s-%d-%s.png" % (prefix, n, scene))
-                shutil.move(os.path.join(tmp, "%s-%s-light.png" % (size, scene)), dest)
+                shutil.move(os.path.join(tmp, "%s-%s-%s.png" % (size, scene, theme)), dest)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -86,15 +95,23 @@ def main():
     ap.add_argument("--only", choices=["feature", "screens"])
     args = ap.parse_args()
     m, mdir = mobile.member(args.slug)
-    out = os.path.join(mdir, "play")
-    os.makedirs(out, exist_ok=True)
-    if args.only != "screens":
-        feature(m, mdir, out)
+    play = os.path.join(mdir, "play")
+    os.makedirs(play, exist_ok=True)
+    # The flat, light-only layout before 2026-10-15 gives way to play/light/ and play/dark/.
+    for name in os.listdir(play):
+        if name.startswith(("phone-", "tablet7-", "tablet10-", "feature-graphic")):
+            os.remove(os.path.join(play, name))
+    for theme in THEMES:
+        out = os.path.join(play, theme)
+        os.makedirs(out, exist_ok=True)
+        if args.only != "screens":
+            feature(m, mdir, out, theme)
+        if args.only != "feature":
+            for name in os.listdir(out):
+                if name.startswith(("phone-", "tablet7-", "tablet10-")):
+                    os.remove(os.path.join(out, name))
+            screens(args.slug, out, theme)
     if args.only != "feature":
-        for name in os.listdir(out):
-            if name.startswith(("phone-", "tablet7-", "tablet10-")):
-                os.remove(os.path.join(out, name))
-        screens(args.slug, out)
         subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.realpath(__file__)), "cover-shots.py"), args.slug], check=True)
 
 

@@ -24,11 +24,11 @@ dropdown or list, each locked and licensed state. The states are the member's ow
     ["eval", js]               run a JavaScript expression in the page (to nudge a state the app should reach by itself)
     ["wait_now", css]          wait for a selector with no settling pause (a state that passes quickly, like a progress bar)
 
-Files: covers/screenshots/{phone,tablet 7,tablet 10}/NN-name.png at the same sizes as cover-shots.py (482x1038, 1027x800,
-1404x932), dark theme, no system bars, rendered at double density and scaled to the exact size. Also covers/screenshots/index.txt,
-the list of what each number is. A step that cannot be driven fails loudly; a picture of the wrong state is never kept.
+Files: covers/screenshots/<theme>/{phone,tablet 7,tablet 10}/NN-name.png at the same sizes as cover-shots.py (482x1038,
+1027x800, 1404x932), in the light and the dark theme, each in its own folder (owner, 2026-10-15), no system bars, rendered
+at double density and scaled to the exact size. Also covers/screenshots/<theme>/index.txt, the list of what each number is. A step that cannot be driven fails loudly; a picture of the wrong state is never kept.
 
-Usage: flow-shots.py <slug> [--theme dark|light] [--only name,name]
+Usage: flow-shots.py <slug> [--theme both|light|dark] [--only name,name]   (both is the default)
 """
 import argparse
 import json
@@ -110,7 +110,7 @@ def act(page, a):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("slug")
-    ap.add_argument("--theme", default="dark")
+    ap.add_argument("--theme", default="both", choices=("both", "light", "dark"))
     ap.add_argument("--only", default="")
     args = ap.parse_args()
     brand = mobile.brand()
@@ -118,75 +118,79 @@ def main():
     site = brand["app"]["site"].rstrip("/")
     recipe = json.load(open(os.path.join(mdir, "shots.json")))["shots"]
     only = set(filter(None, args.only.split(",")))
-    out = os.path.join(mdir, "covers", "screenshots")
+    themes = ("light", "dark") if args.theme == "both" else (args.theme,)
+    shots_dir = os.path.join(mdir, "covers", "screenshots")
     if not only:
-        shutil.rmtree(out, ignore_errors=True)
+        shutil.rmtree(shots_dir, ignore_errors=True)
     failures = 0
     insets = {"top": 0, "bottom": 0, "left": 0, "right": 0}
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for folder, size, target in SETS:
-            w, h = render.SIZES[size]
-            os.makedirs(os.path.join(out, folder), exist_ok=True)
-            for n, shot in enumerate(recipe, 1):
-                if only and shot["name"] not in only:
-                    continue
-                ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=2, is_mobile=True, has_touch=True,
-                                          color_scheme=args.theme, user_agent="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
-                ctx.route(site + "/app/**", render.serve(mdir))
-                if SHIFT:
-                    ctx.route(site + "/s-api/**", shifted_api)
-                    ctx.add_init_script(weekday.init_script(SHIFT))
-                if local_engine.enabled():
-                    ctx.route(site + "/s-api/binary-signal*", local_engine.route(SHIFT, weekday.shift_json))
-                for part in shot.get("block", []):
-                    ctx.route("**/*" + part + "*", lambda r: r.abort())
-                if shot.get("store") == "licensed" or shot.get("stub_licence"):
-                    ctx.route(site + "/s-api/licenses*", lambda r, q: r.fulfill(status=200, content_type="application/json",
-                              body=json.dumps({m["item"]: {"licensed": True, "expires_at": "2027-04-06T00:00:00Z"}})))
-                    ctx.route(site + "/s-api/license?*", lambda r, q: r.fulfill(status=200, content_type="application/json",
-                              body=json.dumps({"licensed": True, "brokers": [], "expires_at": "2027-04-06T00:00:00Z"})))
-                ctx.add_init_script("""(() => {
-                    const s = %s;
-                    try { if (s && !localStorage.getItem('sa-store')) localStorage.setItem('sa-store', JSON.stringify(s)); } catch (e) {}
-                    window.SignalAndroid = { theme() {}, open() {}, version() { return %s; } };
-                    document.addEventListener('DOMContentLoaded', () => window.signalShell && window.signalShell.insets(%s));
-                })();""" % (json.dumps(store_for(shot.get("store", "trial"))), json.dumps(m["version_name"]), json.dumps(insets)))
-                page = ctx.new_page()
-                errors = []
-                page.on("pageerror", lambda e, errors=errors: errors.append("page error: %s" % e))
-                page.on("console", lambda msg, errors=errors: msg.type == "error" and "favicon" not in msg.text and errors.append("console: " + msg.text))
-                page.goto("%s/app/index.html?system=%s" % (site, args.theme))
-                page.wait_for_timeout(900)
-                problem = None
-                try:
-                    for a in shot["actions"]:
-                        act(page, a)
-                    if shot.get("wait_for"):
-                        page.wait_for_selector(shot["wait_for"], timeout=60000)
-                        page.wait_for_timeout(1200)
-                except Exception as e:
-                    problem = str(e).splitlines()[0]
-                if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
-                    problem = problem or "the page scrolls sideways"
-                if errors and not shot.get("allow_errors"):
-                    problem = problem or errors[0]
-                raw = os.path.join(out, folder, "_raw.png")
-                page.screenshot(path=raw)
-                ctx.close()
-                if problem:
-                    failures += 1
-                    print("FAIL %-9s %02d-%s: %s" % (folder, n, shot["name"], problem))
+        for theme in themes:
+            out = os.path.join(shots_dir, theme)
+            for folder, size, target in SETS:
+                w, h = render.SIZES[size]
+                os.makedirs(os.path.join(out, folder), exist_ok=True)
+                for n, shot in enumerate(recipe, 1):
+                    if only and shot["name"] not in only:
+                        continue
+                    ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=2, is_mobile=True, has_touch=True,
+                                              color_scheme=theme, user_agent="Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
+                    ctx.route(site + "/app/**", render.serve(mdir))
+                    if SHIFT:
+                        ctx.route(site + "/s-api/**", shifted_api)
+                        ctx.add_init_script(weekday.init_script(SHIFT))
+                    if local_engine.enabled():
+                        ctx.route(site + "/s-api/binary-signal*", local_engine.route(SHIFT, weekday.shift_json))
+                    for part in shot.get("block", []):
+                        ctx.route("**/*" + part + "*", lambda r: r.abort())
+                    if shot.get("store") == "licensed" or shot.get("stub_licence"):
+                        ctx.route(site + "/s-api/licenses*", lambda r, q: r.fulfill(status=200, content_type="application/json",
+                                  body=json.dumps({m["item"]: {"licensed": True, "expires_at": "2027-04-06T00:00:00Z"}})))
+                        ctx.route(site + "/s-api/license?*", lambda r, q: r.fulfill(status=200, content_type="application/json",
+                                  body=json.dumps({"licensed": True, "brokers": [], "expires_at": "2027-04-06T00:00:00Z"})))
+                    ctx.add_init_script("""(() => {
+                        const s = %s;
+                        try { if (s && !localStorage.getItem('sa-store')) localStorage.setItem('sa-store', JSON.stringify(s)); } catch (e) {}
+                        window.SignalAndroid = { theme() {}, open() {}, version() { return %s; } };
+                        document.addEventListener('DOMContentLoaded', () => window.signalShell && window.signalShell.insets(%s));
+                    })();""" % (json.dumps(store_for(shot.get("store", "trial"))), json.dumps(m["version_name"]), json.dumps(insets)))
+                    page = ctx.new_page()
+                    errors = []
+                    page.on("pageerror", lambda e, errors=errors: errors.append("page error: %s" % e))
+                    page.on("console", lambda msg, errors=errors: msg.type == "error" and "favicon" not in msg.text and errors.append("console: " + msg.text))
+                    page.goto("%s/app/index.html?system=%s" % (site, theme))
+                    page.wait_for_timeout(900)
+                    problem = None
+                    try:
+                        for a in shot["actions"]:
+                            act(page, a)
+                        if shot.get("wait_for"):
+                            page.wait_for_selector(shot["wait_for"], timeout=60000)
+                            page.wait_for_timeout(1200)
+                    except Exception as e:
+                        problem = str(e).splitlines()[0]
+                    if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+                        problem = problem or "the page scrolls sideways"
+                    if errors and not shot.get("allow_errors"):
+                        problem = problem or errors[0]
+                    raw = os.path.join(out, folder, "_raw.png")
+                    page.screenshot(path=raw)
+                    ctx.close()
+                    if problem:
+                        failures += 1
+                        print("FAIL %-5s %-9s %02d-%s: %s" % (theme, folder, n, shot["name"], problem))
+                        os.remove(raw)
+                        continue
+                    Image.open(raw).convert("RGB").resize(target, Image.LANCZOS).save(os.path.join(out, folder, "%02d-%s.png" % (n, shot["name"])), optimize=True)
                     os.remove(raw)
-                    continue
-                Image.open(raw).convert("RGB").resize(target, Image.LANCZOS).save(os.path.join(out, folder, "%02d-%s.png" % (n, shot["name"])), optimize=True)
-                os.remove(raw)
-                print("ok   %-9s %02d-%s" % (folder, n, shot["name"]))
+                    print("ok   %-5s %-9s %02d-%s" % (theme, folder, n, shot["name"]))
         browser.close()
-    with open(os.path.join(out, "index.txt"), "w") as f:
-        for n, shot in enumerate(recipe, 1):
-            f.write("%02d-%s\t%s\n" % (n, shot["name"], shot.get("title", "")))
-    print(os.path.relpath(out, mobile.ROOT))
+    for theme in themes:
+        with open(os.path.join(shots_dir, theme, "index.txt"), "w") as f:
+            for n, shot in enumerate(recipe, 1):
+                f.write("%02d-%s\t%s\n" % (n, shot["name"], shot.get("title", "")))
+    print(os.path.relpath(shots_dir, mobile.ROOT))
     sys.exit(1 if failures else 0)
 
 

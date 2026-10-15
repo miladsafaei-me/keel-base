@@ -9,16 +9,16 @@ The scenes are the member's own, listed in <slug>/covers.json:
                "line": "Enter your licence key, or start the <em>7-day free trial</em>.",
                "features": [["key", "Key or Link", "Either works"], ...], "light": false}]}
 
-  shot      a state name from shots.json; its picture is taken from covers/screenshots/<device>/NN-<shot>.png
+  shot      a state name from shots.json; its picture is taken from covers/screenshots/<theme>/<device>/NN-<shot>.png
   title     two lines, the second in the accent colour
   line      one sentence under the phone, or beside the tablet; <em> marks the accent words
   features  four [icon, label, sub] cards, tablets only; icons: shield key chart bolt clock chat lock layers
   light     true when the shot is the app's light appearance (the frame's status bar turns light)
 
 Folders, all under <slug>/covers/:
-  screenshots/{phone,tablet 7,tablet 10}/NN-name.png   every state, made by flow-shots.py (index.txt lists them)
-  raw/{phone,tablet 7,tablet 10}/N.png                  the shot each cover uses, copied here
-  final/{phone,tablet 7,tablet 10}/N.png                the covers: phone 1080x1920, 7-inch 1920x1080, 10-inch 2560x1440
+  screenshots/<theme>/{phone,tablet 7,tablet 10}/NN-name.png   every state, made by flow-shots.py (index.txt lists them)
+  raw/<theme>/{phone,tablet 7,tablet 10}/N.png          the shot each cover uses, copied here
+  final/<theme>/{phone,tablet 7,tablet 10}/N.png              the covers: phone 1080x1920, 7-inch 1920x1080, 10-inch 2560x1440
   covers-<slug>.zip                                     screenshots/, raw/ and final/ together
 
 Usage: store-covers.py <slug>
@@ -39,6 +39,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..
 from cover_page import SIZES, data_uri, page  # noqa: E402
 
 DEVICES = [("phone", "phone"), ("tablet 7", "tablet7"), ("tablet 10", "tablet10")]
+# Every cover in both themes, each in its own folder (owner, 2026-10-15); a light cover is drawn on a pale stage.
+THEMES = ("light", "dark")
 
 
 def main():
@@ -54,30 +56,31 @@ def main():
         sys.exit("no .woff2 font in %s: run sync-from-site.py first" % assets)
     job = dict(spec, _font=data_uri(fonts[0]), _logo=data_uri(os.path.join(assets, "logo-384.webp")))
     plan = []
-    for folder, dev in DEVICES:
-        for n, scene in enumerate(spec["scenes"], 1):
-            hits = glob.glob(os.path.join(shots, folder, "[0-9][0-9]-%s.png" % scene["shot"]))
-            if len(hits) != 1:
-                sys.exit("covers.json scene %d: no single %s/NN-%s.png; run flow-shots.py, or fix the name" % (n, folder, scene["shot"]))
-            plan.append((folder, dev, n, scene, hits[0]))
+    for theme in THEMES:
+        for folder, dev in DEVICES:
+            for n, scene in enumerate(spec["scenes"], 1):
+                hits = glob.glob(os.path.join(shots, theme, folder, "[0-9][0-9]-%s.png" % scene["shot"]))
+                if len(hits) != 1:
+                    sys.exit("covers.json scene %d: no single %s/%s/NN-%s.png; run flow-shots.py, or fix the name" % (n, theme, folder, scene["shot"]))
+                plan.append((theme, folder, dev, n, scene, hits[0]))
     for sub in ("raw", "final"):
         shutil.rmtree(os.path.join(covers, sub), ignore_errors=True)
     with sync_playwright() as pw:
         br = pw.chromium.launch()
-        for folder, dev, n, scene, src in plan:
-            raw = os.path.join(covers, "raw", folder, "%d.png" % n)
+        for theme, folder, dev, n, scene, src in plan:
+            raw = os.path.join(covers, "raw", theme, folder, "%d.png" % n)
             os.makedirs(os.path.dirname(raw), exist_ok=True)
             shutil.copyfile(src, raw)
-            cover = dict(scene, device=dev, shot=raw, out="%s/%d.png" % (folder, n), foot=spec.get("foot", ""))
+            cover = dict(scene, device=dev, shot=raw, out="%s/%d.png" % (folder, n), foot=spec.get("foot", ""), theme=theme)
             w, h = SIZES[dev]
             pg = br.new_page(viewport={"width": w, "height": h})
             pg.set_content(page(cover, job, w, h))
             pg.wait_for_timeout(400)
-            final = os.path.join(covers, "final", folder, "%d.png" % n)
+            final = os.path.join(covers, "final", theme, folder, "%d.png" % n)
             os.makedirs(os.path.dirname(final), exist_ok=True)
             pg.screenshot(path=final)
             pg.close()
-            print("ok   %-9s %2d  %s" % (folder, n, scene["shot"]))
+            print("ok   %-5s %-9s %2d  %s" % (theme, folder, n, scene["shot"]))
         br.close()
     zpath = os.path.join(covers, "covers-%s.zip" % sys.argv[1])
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:

@@ -102,6 +102,30 @@ h1 .acc { background: linear-gradient(90deg, #5fe0a0, #19b56b); -webkit-backgrou
 """
 
 
+# The light cover (owner, 2026-10-15: every screenshot and cover ships in light and dark, each in its own folder): the
+# same layout on a pale stage with navy ink, for the app's light screenshots. A cover is light when cover["theme"] is
+# "light"; its device status bar then turns light too.
+LIGHT_CSS = """
+body { color: #0a1a33; background: radial-gradient(ellipse at 70%% 35%%, #ffffff 0%%, #eef3ff 45%%, #dce5f8 85%%); }
+.g1 { background: rgba(0, 136, 255, .16); } .g2 { background: rgba(162, 0, 255, .12); } .g3 { background: rgba(25, 181, 107, .12); }
+.brand img { filter: drop-shadow(0 8px 20px rgba(3, 24, 51, .2)); }
+h1 .acc { background: linear-gradient(90deg, #19b56b, #0d7a45); -webkit-background-clip: text; color: transparent; }
+.line { color: #3b4a66; } .line em { color: #0d7a45; }
+.feat { background: rgba(255, 255, 255, .8); border-color: rgba(13, 122, 69, .28); box-shadow: 0 10px 28px rgba(3, 24, 51, .07); }
+.feat svg { stroke: #0d7a45; filter: none; }
+.feat small { color: #4f5d74; }
+.device { box-shadow: 0 0 0 3px #2a3140, 0 0 0 5px #0a0d14, 0 40px 110px rgba(3, 24, 51, .28), 0 0 80px rgba(0, 136, 255, .18); }
+.device.light { box-shadow: 0 0 0 3px #c9ccd2, 0 40px 110px rgba(3, 24, 51, .22), 0 0 80px rgba(0, 136, 255, .16); }
+.home { background: rgba(10, 26, 51, .55); }
+.win { background: #ffffff; box-shadow: 0 0 0 1px #d3dcea, 0 30px 90px rgba(3, 24, 51, .18), 0 0 80px rgba(0, 136, 255, .14); }
+.wbar { background: #eef1f6; } .wbar i { background: #c3cedf; }
+.wtab { background: #ffffff; color: #3b4a66; }
+.wurl { background: #ffffff; border-bottom-color: #e3e8f0; } .wurl b { background: #eef1f6; color: #4f5d74; }
+.wpage { background: radial-gradient(ellipse at 30%% 40%%, #f6f8fd, #e2e9f7 70%%); }
+.pop { box-shadow: 0 0 0 1px #d3dcea, 0 24px 60px rgba(3, 24, 51, .22); }
+"""
+
+
 def page(cover, job, w, h):
     dev = cover["device"]
     s = w / 1080 if dev == "phone" else h / 1080
@@ -144,7 +168,7 @@ def page(cover, job, w, h):
         body += '<div style="position:absolute;top:%dpx;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:%dpx;text-align:center">%s<h1>%s</h1></div>' % (70 * s, 34 * s, brand, title)
         body += ('<div class="device" style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"><div class="screen" style="height:100%%">%s<img src="%s"></div>'
                  '<div class="cam" style="left:calc(50%% - %dpx);top:%dpx"></div><div class="home"></div></div>'
-                 % (dx, dy, dw, dh, (STATUS.replace('class="sbar"', 'class="sbar sbar-light"') if cover.get("light") else STATUS), shot, v["cam"] / 2, v["bez"] + 12 * s))
+                 % (dx, dy, dw, dh, (STATUS.replace('class="sbar"', 'class="sbar sbar-light"') if cover.get("light") or cover.get("theme") == "light" else STATUS), shot, v["cam"] / 2, v["bez"] + 12 * s))
         body += '<div class="foot" style="bottom:%dpx"><p class="line" style="padding:0 %dpx;margin-bottom:%dpx">%s</p><div class="rule"></div></div>' % (60 * s, 90 * s, 26 * s, cover["line"])
     elif dev == "browser":
         pw, ph = cover["shot_size"]
@@ -183,6 +207,7 @@ def page(cover, job, w, h):
                  % (w * .035, h * .07, dx - w * .07, 30 * s, brand, title, cover["line"], 14 * s, feats))
         body += ('<div class="device light" style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"><div class="screen" style="height:100%%">%s<img src="%s"></div>'
                  '<div class="cam" style="left:calc(50%% - %dpx);top:%dpx;width:%dpx;height:%dpx"></div><div class="home"></div></div>'
-                 % (dx, dy, dw, dh, (STATUS.replace('class="sbar"', 'class="sbar sbar-light"') if cover.get("light") else STATUS), shot, 9 * s, 12 * s, 18 * s, 18 * s))
+                 % (dx, dy, dw, dh, (STATUS.replace('class="sbar"', 'class="sbar sbar-light"') if cover.get("light") or cover.get("theme") == "light" else STATUS), shot, 9 * s, 12 * s, 18 * s, 18 * s))
         body += '<div class="foot" style="bottom:%dpx;left:%dpx;width:%dpx;right:auto"><p class="line" style="font-size:%dpx">%s</p></div>' % (38 * s, dx, dw, 30 * s, cover.get("foot", ""))
-    return "<!doctype html><html><head><meta charset='utf-8'><style>%s</style></head><body>%s%s</body></html>" % (CSS % v, bg, body)
+    css = CSS % v + (LIGHT_CSS % {} if cover.get("theme") == "light" else "")
+    return "<!doctype html><html><head><meta charset='utf-8'><style>%s</style></head><body>%s%s</body></html>" % (css, bg, body)

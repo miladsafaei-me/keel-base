@@ -11,16 +11,17 @@ The scenes are the extension's own, listed in <extension>/covers.json:
                "line": "Enter your licence key, or start the <em>7-day free trial</em>.",
                "features": [["key", "Key or Link", "Either works"], ...], "light": false}]}
 
-  shot      a state name from shots.json; its picture is covers/screenshots/NN-<shot>.png
+  shot      a state name from shots.json; its picture is covers/screenshots/<theme>/NN-<shot>.png
   title     two lines, the second in the accent colour
   line      one sentence; <em> marks the accent words
   features  four [icon, label, sub] cards; icons: shield key chart bolt clock chat lock layers
 
-Folders, all under <extension>/covers/:
-  screenshots/NN-name.png   every state, made by flow-shots.py (index.txt lists them)
-  raw/N.png                 the shot each cover uses, copied here
-  final/N.png               the covers, 1280x800
-  covers-<slug>.zip         screenshots/, raw/ and final/ together
+Every cover is made in both themes, each in its own folder (owner, 2026-10-15), from the screenshots of that theme;
+a light cover is drawn on a pale stage. Folders, all under <extension>/covers/:
+  screenshots/<theme>/NN-name.png   every state, made by flow-shots.py (index.txt lists them)
+  raw/<theme>/N.png                 the shot each cover uses, copied here
+  final/<theme>/N.png               the covers, 1280x800
+  covers-<slug>.zip                 screenshots/, raw/ and final/ together
 
 Usage: store-covers.py <extension-dir> [<extension-dir> ...]
 Python: ~/.local/share/keel-render-venv/bin/python (playwright + PIL).
@@ -37,6 +38,8 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
 from cover_page import SIZES, data_uri, page  # noqa: E402
+
+THEMES = ("light", "dark")
 
 
 def brand_site(ext_dir):
@@ -60,25 +63,28 @@ def run(br, ext_dir):
         sys.exit("%s: no .woff2 font in chrome/site" % slug)
     job = dict(spec, site_label=spec.get("site_label") or brand_site(ext_dir), _font=data_uri(fonts[0]), _logo=data_uri(logos[0]))
     plan = []
-    for n, scene in enumerate(spec["scenes"], 1):
-        hits = glob.glob(os.path.join(covers, "screenshots", "[0-9][0-9]-%s.png" % scene["shot"]))
-        if len(hits) != 1:
-            sys.exit("%s covers.json scene %d: no single screenshots/NN-%s.png; run flow-shots.py, or fix the name" % (slug, n, scene["shot"]))
-        plan.append((n, scene, hits[0]))
+    for theme in THEMES:
+        for n, scene in enumerate(spec["scenes"], 1):
+            hits = glob.glob(os.path.join(covers, "screenshots", theme, "[0-9][0-9]-%s.png" % scene["shot"]))
+            if len(hits) != 1:
+                sys.exit("%s covers.json scene %d: no single screenshots/%s/NN-%s.png; run flow-shots.py, or fix the name"
+                         % (slug, n, theme, scene["shot"]))
+            plan.append((theme, n, scene, hits[0]))
     for sub in ("raw", "final"):
         shutil.rmtree(os.path.join(covers, sub), ignore_errors=True)
-        os.makedirs(os.path.join(covers, sub))
+        for theme in THEMES:
+            os.makedirs(os.path.join(covers, sub, theme))
     w, h = SIZES["browser"]
-    for n, scene, src in plan:
-        raw = os.path.join(covers, "raw", "%d.png" % n)
+    for theme, n, scene, src in plan:
+        raw = os.path.join(covers, "raw", theme, "%d.png" % n)
         shutil.copyfile(src, raw)
-        cover = dict(scene, device="browser", shot=raw, shot_size=Image.open(raw).size, out="%d.png" % n)
+        cover = dict(scene, device="browser", shot=raw, shot_size=Image.open(raw).size, out="%d.png" % n, theme=theme)
         pg = br.new_page(viewport={"width": w, "height": h})
         pg.set_content(page(cover, job, w, h))
         pg.wait_for_timeout(400)
-        pg.screenshot(path=os.path.join(covers, "final", "%d.png" % n))
+        pg.screenshot(path=os.path.join(covers, "final", theme, "%d.png" % n))
         pg.close()
-        print("ok   %s %2d  %s" % (slug, n, scene["shot"]))
+        print("ok   %s %-5s %2d  %s" % (slug, theme, n, scene["shot"]))
     zpath = os.path.join(covers, "covers-%s.zip" % slug)
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for sub in ("screenshots", "raw", "final"):

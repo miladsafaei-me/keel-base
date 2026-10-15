@@ -25,9 +25,9 @@ that site's source). Commands are the same in every repo:
 tools/sync-from-site.py <slug>     # copy the landing's app in, draw the icons
 tools/render.py <slug>             # every screen, phone and tablet, both themes, with its checks
 tools/play-graphics.py <slug>      # feature graphic and store screenshots
-tools/cover-shots.py <slug>        # raw screenshots for the covers, <slug>/covers/raw/ (play-graphics runs it too)
-tools/flow-shots.py <slug>         # every state of the app (shots.json), <slug>/covers/screenshots/
-tools/store-covers.py <slug>       # the designed covers (covers.json), <slug>/covers/raw/ and final/
+tools/cover-shots.py <slug>        # raw screenshots for the covers, <slug>/covers/raw/<theme>/ (play-graphics runs it too)
+tools/flow-shots.py <slug>         # every state of the app (shots.json), <slug>/covers/screenshots/<theme>/
+tools/store-covers.py <slug>       # the designed covers (covers.json), <slug>/covers/raw/<theme>/ and final/<theme>/
 tools/build.sh <slug>              # signed .aab and .apk, every gate, copied to release/ with a .zip of the member's directory
 tools/check.py <slug>              # the gates alone
 tools/draw-emblem.py <slug>        # a text-free launcher emblem from the logo, with Gemini
@@ -80,10 +80,10 @@ optional `emblem` (`art/emblem.png`), `free_words`, `trial_days`, `contact_messa
 | `sync-from-site.py` | The site's app into `android/assets/`, the icons into `android/res/`, `play/icon-512.png` |
 | `draw-emblem.py` | A launcher emblem without the wordmark, when cropping the logo would cut the emblem |
 | `render.py` | The app in headless Chromium as the WebView draws it, against the live engine, with its checks |
-| `play-graphics.py` | `play/feature-graphic.png` and the phone and tablet screenshots |
-| `cover-shots.py` | `<slug>/covers/raw/{phone,tablet 7,tablet 10}/1..5.png`: the app without a frame, sized to the screen inside a store cover device frame; skipped when the member has a `covers.json` |
-| `flow-shots.py` | `<slug>/covers/screenshots/{phone,tablet 7,tablet 10}/NN-name.png` and `index.txt`: every state listed in the member's `shots.json` |
-| `store-covers.py` | `<slug>/covers/final/{phone,tablet 7,tablet 10}/N.png`: the designed covers of the scenes in the member's `covers.json`, their shots copied to `covers/raw/`, and `covers/covers-<slug>.zip` |
+| `play-graphics.py` | `play/light/` and `play/dark/`: the feature graphic and the phone and tablet screenshots in each theme |
+| `cover-shots.py` | `<slug>/covers/raw/<theme>/{phone,tablet 7,tablet 10}/1..5.png`: the app without a frame, sized to the screen inside a store cover device frame; skipped when the member has a `covers.json` |
+| `flow-shots.py` | `<slug>/covers/screenshots/<theme>/{phone,tablet 7,tablet 10}/NN-name.png` and `index.txt`: every state listed in the member's `shots.json` |
+| `store-covers.py` | `<slug>/covers/final/<theme>/{phone,tablet 7,tablet 10}/N.png`: the designed covers of the scenes in the member's `covers.json`, light on a pale stage and dark, their shots copied to `covers/raw/<theme>/`, and `covers/covers-<slug>.zip` |
 | `check.py` | Brand traces, partner disclosure, site drift, package (signature, target SDK, id, version, permissions), listing |
 | `build.sh` | Sync, Gradle release bundle and APK, the gates, copy to `release/`, then zip the member's whole directory beside them |
 | `host/` | The native activity, manifest, themes and backup rules every app shares |

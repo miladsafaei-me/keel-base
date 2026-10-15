@@ -9,14 +9,14 @@ samples in <family>/screenshots/ (screenshot-sizes.html); the cover sizes themse
   tablet 7/1.png ... 5.png   1027x800   the screen inside the tablet frame of a 1920x1080 cover
   tablet 10/1.png ... 5.png  1404x932   the screen inside the tablet frame of a 2560x1440 cover
 
-The five scenes, the same on every device: 1 licence gate, 2 the chat, 3 a forecast, 4 Access, 5 More. Dark theme
-(the covers are dark), no system bars, the real app against the live signal engine. Each file is rendered at
+The five scenes, the same on every device: 1 licence gate, 2 the chat, 3 a forecast, 4 Access, 5 More. Light and dark,
+in covers/raw/<theme>/ (owner, 2026-10-15), no system bars, the real app against the live signal engine. Each file is rendered at
 double density and scaled to the exact size.
 
 A member with its own covers.json picks its cover shots from every state instead (store-covers.py fills
 covers/raw/), so this skips it.
 
-Usage: cover-shots.py <slug> [--theme dark|light]
+Usage: cover-shots.py <slug> [--theme both|light|dark]   (both is the default)
 """
 import argparse
 import os
@@ -36,29 +36,30 @@ SETS = [("phone", "cover-phone", (482, 1038)), ("tablet 7", "cover-7", (1027, 80
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("slug")
-    ap.add_argument("--theme", default="dark")
+    ap.add_argument("--theme", default="both", choices=("both", "light", "dark"))
     args = ap.parse_args()
     m, mdir = mobile.member(args.slug)
     if os.path.isfile(os.path.join(mdir, "covers.json")):
         print("covers.json picks the cover shots: run store-covers.py %s" % args.slug)
         return
-    out = os.path.join(mdir, "covers", "raw")
-    shutil.rmtree(out, ignore_errors=True)
-    for folder, size, target in SETS:
+    raw_dir = os.path.join(mdir, "covers", "raw")
+    shutil.rmtree(raw_dir, ignore_errors=True)
+    for theme, folder, size, target in [(t,) + s for t in (("light", "dark") if args.theme == "both" else (args.theme,)) for s in SETS]:
+        out = os.path.join(raw_dir, theme)
         tmp = tempfile.mkdtemp(prefix="sa-cover-")
         try:
-            run = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.realpath(__file__)), "render.py"), args.slug, "--sizes", size, "--themes", args.theme,
+            run = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.realpath(__file__)), "render.py"), args.slug, "--sizes", size, "--themes", theme,
                                   "--scenarios", ",".join(SCENES), "--dpr", "2", "--no-insets", "--out", tmp], capture_output=True, text=True)
             print(run.stdout.strip())
             if run.returncode:
                 sys.exit("a cover screenshot scene failed; fix it before the covers are made")
             os.makedirs(os.path.join(out, folder), exist_ok=True)
             for n, scene in enumerate(SCENES, 1):
-                shot = Image.open(os.path.join(tmp, "%s-%s-%s.png" % (size, scene, args.theme))).convert("RGB")
+                shot = Image.open(os.path.join(tmp, "%s-%s-%s.png" % (size, scene, theme))).convert("RGB")
                 shot.resize(target, Image.LANCZOS).save(os.path.join(out, folder, "%d.png" % n), optimize=True)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-    print(os.path.relpath(out, mobile.ROOT))
+    print(os.path.relpath(raw_dir, mobile.ROOT))
 
 
 if __name__ == "__main__":
