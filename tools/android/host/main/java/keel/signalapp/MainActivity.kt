@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.JavascriptInterface
@@ -204,6 +205,11 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 isDarkShell = mode == "dark"
                 applyBars(isDarkShell)
+                // The WebView's unpainted tiles show its own colour, which otherwise follows the system theme: a dark
+                // shell on a light phone showed white patches behind the cards.
+                val ground = ContextCompat.getColor(this@MainActivity, if (isDarkShell) R.color.surface_dark else R.color.surface_light)
+                web.setBackgroundColor(ground)
+                window.setBackgroundDrawable(ColorDrawable(ground))
             }
         }
 
