@@ -66,7 +66,7 @@ def state(scenario):
         return None
     store = {"trialStart": now - DAY, "license": None, "signedOut": False, "notice": None}
     if scenario == "access":
-        store["license"] = {"key": "ATB-DEMO7K2Q9X", "token": None, "brokers": [], "expires_at": "2027-04-06T00:00:00Z", "checkedAt": now}
+        store["license"] = {"key": mobile.brand()["app"]["key_prefix"] + "DEMO7K2Q9X", "token": None, "brokers": [], "expires_at": "2027-04-06T00:00:00Z", "checkedAt": now}
     return store
 
 

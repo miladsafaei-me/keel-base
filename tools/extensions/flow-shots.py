@@ -76,7 +76,7 @@ STORE_SIZE = (1280, 800)
 STORE_POPUP_HEIGHT = 720
 RADIUS = 12
 DAY = 24 * 60 * 60 * 1000
-LICENCE_KEY = "ATB-TESTTESTAB"
+LICENCE_KEY = "ATB-TESTTESTAB"  # the brand's own prefix replaces ATB- in detect() when brand.json names one
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"
 
 STUB = """
@@ -143,6 +143,16 @@ STUB = """
 THEME = ["atb-theme"]  # set by detect() from the build's popup.js
 
 
+def brand_app(start):
+    """The repo's brand.json app block, found at or above `start` (a build folder)."""
+    d = os.path.abspath(start)
+    while d != os.path.dirname(d):
+        if os.path.isfile(os.path.join(d, "brand.json")):
+            return json.load(open(os.path.join(d, "brand.json"), encoding="utf-8")).get("app", {})
+        d = os.path.dirname(d)
+    return {}
+
+
 def read(path):
     with open(path, encoding="utf-8") as fh:
         return fh.read()
@@ -157,6 +167,8 @@ def detect(chrome_dir):
     # The theme key is the brand's own (the popup's THEME_KEY); older members name none.
     theme_key = re.search(r'THEME_KEY\s*=\s*"([\w-]+)"', popup)
     THEME[0] = theme_key.group(1) if theme_key else "atb-theme"
+    global LICENCE_KEY
+    LICENCE_KEY = (brand_app(chrome_dir).get("key_prefix") or "ATB-") + "TESTTESTAB"
     prefix = re.search(r'msg\.type === "([A-Z]+)_GET_SIGNAL"', background).group(1)
     site = re.search(r'var SITE = "(https?://[^"]+)"', config).group(1)
     win = re.search(r"WINDOW:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)", config)

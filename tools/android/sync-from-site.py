@@ -97,6 +97,7 @@ def config_js(brand, m):
         "AFFILIATE_NAME": link["name"],
         "AFFILIATE_LABEL": "Join " + link["name"],
         "TELEGRAM_POOL": app["telegram_pool"],
+        "TELEGRAM_URL": app.get("telegram_url", ""),
         "SUPPORT_EMAIL": app["support_email"],
         "CONTACT_MESSAGE": m["contact_message"],
         "TRIAL_DAYS": m["trial_days"],
@@ -240,9 +241,13 @@ def outputs(slug, ref):
             "android/assets/index.html": page.encode(),
             "android/assets/config.js": config_js(brand, m).encode(),
             "android/assets/site/site.css": css.encode(),
-            "android/assets/site/inter-latin.woff2": open(font, "rb").read(),
             "android/assets/site/SOURCE": ("%s design/src at %s (%s)\n" % (brand["app"]["site_label"], commit, ref)).encode(),
         }
+        # The adapter names one font (stored under the name the stylesheet asks for, inter-latin.woff2, in the
+        # first brand) or a list of fonts, each stored under its own file name.
+        for path in (font if isinstance(font, (list, tuple)) else [font]):
+            name = os.path.basename(path) if isinstance(font, (list, tuple)) else "inter-latin.woff2"
+            files["android/assets/site/" + name] = open(path, "rb").read()
         for script in m["site"]["scripts"]:
             files["android/assets/site/" + script] = open(os.path.join(src, script), "rb").read()
         for name, path in assets.items():
