@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import mobile  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
-from cover_page import SIZES, data_uri, page  # noqa: E402
+from cover_page import SIZES, brand_css, data_uri, page  # noqa: E402
 
 DEVICES = [("phone", "phone"), ("tablet 7", "tablet7"), ("tablet 10", "tablet10")]
 # Every cover in both themes, each in its own folder (owner, 2026-10-15); a light cover is drawn on a pale stage.
@@ -54,7 +54,7 @@ def main():
     fonts = sorted(glob.glob(os.path.join(assets, "*.woff2")))
     if not fonts:
         sys.exit("no .woff2 font in %s: run sync-from-site.py first" % assets)
-    job = dict(spec, _font=data_uri(fonts[0]), _logo=data_uri(os.path.join(assets, "logo-384.webp")))
+    job = dict(spec, _font=data_uri(fonts[0]), _logo=data_uri(os.path.join(assets, "logo-384.webp")), _brand_css=brand_css(mdir))
     plan = []
     for theme in THEMES:
         for folder, dev in DEVICES:

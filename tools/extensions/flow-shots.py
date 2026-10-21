@@ -87,7 +87,7 @@ STUB = """
   try { data = JSON.parse(localStorage.getItem("__flow_store") || "null"); } catch (e) { data = null; }
   if (!data) { data = { [KEY]: seed.store }; }
   const save = () => { try { localStorage.setItem("__flow_store", JSON.stringify(data)); } catch (e) {} };
-  try { localStorage.setItem("atb-theme", seed.theme); } catch (e) {}
+  try { localStorage.setItem(seed.themeKey, seed.theme); } catch (e) {}
   save();
   const params = (s) => new URLSearchParams(s || "");
   window.chrome = {
@@ -140,6 +140,9 @@ STUB = """
 """
 
 
+THEME = ["atb-theme"]  # set by detect() from the build's popup.js
+
+
 def read(path):
     with open(path, encoding="utf-8") as fh:
         return fh.read()
@@ -151,6 +154,9 @@ def detect(chrome_dir):
     background = read(os.path.join(chrome_dir, "background.js"))
     config = read(os.path.join(chrome_dir, "config.js"))
     store_key = re.search(r'STORE_KEY\s*=\s*"(\w+)"', popup).group(1)
+    # The theme key is the brand's own (the popup's THEME_KEY); older members name none.
+    theme_key = re.search(r'THEME_KEY\s*=\s*"([\w-]+)"', popup)
+    THEME[0] = theme_key.group(1) if theme_key else "atb-theme"
     prefix = re.search(r'msg\.type === "([A-Z]+)_GET_SIGNAL"', background).group(1)
     site = re.search(r'var SITE = "(https?://[^"]+)"', config).group(1)
     win = re.search(r"WINDOW:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)", config)
@@ -177,7 +183,7 @@ def seed_for(store_name, store_key, prefix, extra, theme="dark"):
                             "expires_at": expires, "checkedAt": now}
     store.update(extra or {})
     return {"store": store, "storeKey": store_key, "prefix": prefix,
-            "placeholderKey": LICENCE_KEY, "expires": expires, "theme": theme}
+            "placeholderKey": LICENCE_KEY, "expires": expires, "theme": theme, "themeKey": THEME[0]}
 
 
 def make_relay(log):

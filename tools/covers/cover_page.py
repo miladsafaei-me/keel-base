@@ -2,6 +2,7 @@
 popup), the logo, the headline, the line and the feature cards, as one HTML page that Chromium renders.
 Shared by android/store-covers.py and extensions/store-covers.py; neither needs an image model."""
 import base64
+import json
 import os
 import random
 
@@ -12,6 +13,20 @@ def data_uri(path):
     ext = os.path.splitext(path)[1].lstrip(".").replace("jpg", "jpeg")
     mime = {"woff2": "font/woff2", "webp": "image/webp"}.get(ext, "image/" + ext)
     return "data:%s;base64,%s" % (mime, base64.b64encode(open(path, "rb").read()).decode())
+
+
+def brand_css(start):
+    """The brand's own cover colours: brand.json "covers_css" {"dark": css, "light": css}, found at or above `start`.
+
+    The stage, glows, badge, accent and line colours below are one brand's; a repo whose site wears another palette
+    overrides them here with plain CSS appended after the defaults (a site's rule may forbid the sibling's gradient)."""
+    d = os.path.abspath(start)
+    while d != os.path.dirname(d):
+        f = os.path.join(d, "brand.json")
+        if os.path.isfile(f):
+            return json.load(open(f, encoding="utf-8")).get("covers_css", {})
+        d = os.path.dirname(d)
+    return {}
 
 
 ICONS = {
@@ -209,5 +224,6 @@ def page(cover, job, w, h):
                  '<div class="cam" style="left:calc(50%% - %dpx);top:%dpx;width:%dpx;height:%dpx"></div><div class="home"></div></div>'
                  % (dx, dy, dw, dh, (STATUS.replace('class="sbar"', 'class="sbar sbar-light"') if cover.get("light") or cover.get("theme") == "light" else STATUS), shot, 9 * s, 12 * s, 18 * s, 18 * s))
         body += '<div class="foot" style="bottom:%dpx;left:%dpx;width:%dpx;right:auto"><p class="line" style="font-size:%dpx">%s</p></div>' % (38 * s, dx, dw, 30 * s, cover.get("foot", ""))
-    css = CSS % v + (LIGHT_CSS % {} if cover.get("theme") == "light" else "")
+    light = cover.get("theme") == "light"
+    css = CSS % v + (LIGHT_CSS % {} if light else "") + job.get("_brand_css", {}).get("light" if light else "dark", "")
     return "<!doctype html><html><head><meta charset='utf-8'><style>%s</style></head><body>%s%s</body></html>" % (css, bg, body)

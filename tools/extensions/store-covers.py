@@ -37,7 +37,7 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "covers"))
-from cover_page import SIZES, data_uri, page  # noqa: E402
+from cover_page import SIZES, brand_css, data_uri, page  # noqa: E402
 
 THEMES = ("light", "dark")
 
@@ -61,7 +61,7 @@ def run(br, ext_dir):
     logos = sorted(glob.glob(os.path.join(site, "%s-160.*.webp" % slug))) or [os.path.join(ext_dir, "chrome", "icons", "mark_192.png")]
     if not fonts:
         sys.exit("%s: no .woff2 font in chrome/site" % slug)
-    job = dict(spec, site_label=spec.get("site_label") or brand_site(ext_dir), _font=data_uri(fonts[0]), _logo=data_uri(logos[0]))
+    job = dict(spec, site_label=spec.get("site_label") or brand_site(ext_dir), _font=data_uri(fonts[0]), _logo=data_uri(logos[0]), _brand_css=brand_css(ext_dir))
     plan = []
     for theme in THEMES:
         for n, scene in enumerate(spec["scenes"], 1):
