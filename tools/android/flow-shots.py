@@ -148,7 +148,7 @@ def main():
                         ctx.route(site + "/s-api/licenses*", lambda r, q: r.fulfill(status=200, content_type="application/json",
                                   body=json.dumps({m["item"]: {"licensed": True, "expires_at": "2027-04-06T00:00:00Z"}})))
                         ctx.route(site + "/s-api/license?*", lambda r, q: r.fulfill(status=200, content_type="application/json",
-                                  body=json.dumps({"licensed": True, "brokers": [], "expires_at": "2027-04-06T00:00:00Z"})))
+                                  body=json.dumps({"licensed": True, "brokers": "all", "expires_at": "2027-04-06T00:00:00Z"})))
                     ctx.add_init_script("""(() => {
                         const s = %s;
                         try { if (s && !localStorage.getItem('sa-store')) localStorage.setItem('sa-store', JSON.stringify(s)); } catch (e) {}

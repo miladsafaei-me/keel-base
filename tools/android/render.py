@@ -66,7 +66,7 @@ def state(scenario):
         return None
     store = {"trialStart": now - DAY, "license": None, "signedOut": False, "notice": None}
     if scenario == "access":
-        store["license"] = {"key": mobile.brand()["app"]["key_prefix"] + "DEMO7K2Q9X", "token": None, "brokers": [], "expires_at": "2027-04-06T00:00:00Z", "checkedAt": now}
+        store["license"] = {"key": mobile.brand()["app"]["key_prefix"] + "DEMO7K2Q9X", "token": None, "brokers": "all", "expires_at": "2027-04-06T00:00:00Z", "checkedAt": now}
     return store
 
 
@@ -174,7 +174,7 @@ def main():
                         ctx.route(site + "/s-api/binary-signal*", local_engine.route())
                     if scenario == "access":
                         ctx.route(site + "/s-api/license?*", lambda r, q: r.fulfill(status=200, content_type="application/json",
-                                  body=json.dumps({"licensed": True, "brokers": [], "expires_at": "2027-04-06T00:00:00Z"})))
+                                  body=json.dumps({"licensed": True, "brokers": "all", "expires_at": "2027-04-06T00:00:00Z"})))
                     insets = {"top": 0, "bottom": 0, "left": 0, "right": 0} if args.no_insets else INSETS
                     store = state(scenario)
                     ctx.add_init_script("""(() => {
