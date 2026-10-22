@@ -69,7 +69,8 @@ A tool finds its repo from `$MOBILE_ROOT`, else from the `tools/` folder it was 
 `slug`, `item` (licence item), `name`, `application_id` (never changes once on Play), `version_name`, `version_code`
 (raise it on every upload), `site` (`module`, `markup`, `scripts`, `logo`, `logo_ground`, optional `emblem_box`, optional `archive`: other
 site paths the markup reads, archived beside `design/`),
-optional `emblem` (`art/emblem.png`), `free_words`, `trial_days`, `contact_message`, `tab_app` (`label`, `icon`),
+optional `emblem` (`art/emblem.png`), optional `landing` (the landing's slug when it is not the member's own, as for a
+broker edition of another member's tool), `free_words`, `trial_days`, `contact_message`, `tab_app` (`label`, `icon`),
 `tagline` and `eyebrow` (feature graphic).
 
 ## What each file does

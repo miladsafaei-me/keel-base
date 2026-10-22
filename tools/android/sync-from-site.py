@@ -85,7 +85,7 @@ def config_js(brand, m):
         "ITEM": m["item"],
         "SIGNAL_URL": site + "/s-api/binary-signal",
         "LICENSE_URL": site + "/s-api/license",
-        "LANDING_URL": app["landing_url"].format(slug=m["slug"]),
+        "LANDING_URL": app["landing_url"].format(slug=m.get("landing", m["slug"])),
         "SIGNUP_URL": app["signup_url"].format(item=m["item"]),
         "RISK_URL": app["risk_url"],
         "PRIVACY_URL": app["privacy_url"],
