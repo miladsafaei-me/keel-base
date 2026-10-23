@@ -70,6 +70,15 @@ def localise(html, design, out_assets):
         out_assets[os.path.basename(name)] = os.path.join(design, "assets", name)
         return '%s="site/%s"' % (m.group(1), os.path.basename(name))
     html = re.sub(r'(href|src)="assets/([^"]+)"', asset, html)
+
+    def srcset(m):
+        """Every candidate of a srcset ("assets/a.webp 1x, assets/b.webp 2x"), so a 2x screen finds its file too."""
+        def one(c):
+            name = c.group(1)
+            out_assets[os.path.basename(name)] = os.path.join(design, "assets", name)
+            return "site/" + os.path.basename(name)
+        return 'srcset="%s"' % re.sub(r'assets/([^\s,"]+)', one, m.group(1))
+    html = re.sub(r'srcset="([^"]*assets/[^"]*)"', srcset, html)
     return re.sub(r'href="([a-z0-9-]+)\.html"', r'href="#" data-site-page="\1"', html)
 
 
