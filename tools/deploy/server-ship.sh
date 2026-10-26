@@ -69,8 +69,11 @@ echo "[ship] build done in $((SECONDS - started))s"
 bash "$script"
 
 # Keep the five newest commit-tagged images for rollback, then drop dangling
-# layers. A tag still used by a container is refused by podman and simply kept.
+# layers older than a week. A tag still used by a container is refused by podman
+# and simply kept. The age filter is load-bearing: a multi-stage build's first
+# stage (its pip or npm install) is untagged, so an unfiltered prune deleted it
+# after every deploy and the next build installed everything again.
 podman images "$image" --sort created --format '{{.Tag}}' \
     | grep -vx -e latest -e '<none>' | tail -n +6 \
     | while read -r tag; do podman rmi "$image:$tag" >/dev/null 2>&1 || true; done
-podman image prune -f >/dev/null 2>&1 || true
+podman image prune -f --filter until=168h >/dev/null 2>&1 || true
