@@ -31,6 +31,16 @@ OPT_WRITERS = {"curl", "wget", "ffmpeg", "gcc", "g++", "cc", "clang", "clang++",
                "magick", "wkhtmltopdf", "wkhtmltoimage", "objcopy", "go", "dot",
                "zip"}
 DEST_LAST = {"cp", "mv", "install", "rsync"}
+# A word that only reads as a file command when it IS the command: `pip install x`
+# and `podman rm web` name a subcommand, not coreutils install or rm. git stays out
+# of this set on purpose, because `git rm` and `git mv` do touch the tree.
+SUBCOMMAND_HOSTS = {"pip", "pip3", "pipx", "uv", "poetry", "conda", "npm", "pnpm",
+                    "yarn", "apt", "apt-get", "dnf", "yum", "brew", "cargo", "gem",
+                    "go", "flatpak", "snap", "podman", "docker", "helm", "gh",
+                    "systemctl", "make"}
+# A redirect split at its `&` (`2>&1` becomes `... 2>` and `1`) leaves a
+# fragment like `2>` that is never a filename.
+REDIRECT_FRAGMENT = re.compile(r"^[0-9]*[<>]")
 WRITE_FIRST = {"touch", "truncate", "unlink", "rm", "mkdir", "rmdir", "ln", "patch", "dd"}
 SHELL_META = ("$", "`", "(", ")", "=", "*", "?", "{", "}")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
@@ -54,9 +64,9 @@ def strip_heredocs(command):
     return "\n".join(out)
 
 
-def project_root(path):
+def project_root(path, base):
     """Repo root of the top-level project owning a path, else None."""
-    p = os.path.realpath(os.path.join(os.getcwd(), os.path.expanduser(path)))
+    p = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
     if not p.startswith(WORKSPACE + os.sep):
         return None
     top = p[len(WORKSPACE) + 1:].split(os.sep)[0]
@@ -66,7 +76,7 @@ def project_root(path):
     return root
 
 
-def looks_like_path(candidate):
+def looks_like_path(candidate, base):
     """Filter out arguments that merely resemble a path (a sed script, a regex).
 
     A real target is absolute, already exists, or at least has an existing parent
@@ -76,21 +86,21 @@ def looks_like_path(candidate):
         return False
     if candidate.startswith(("/", "~")):
         return True
-    resolved = os.path.join(os.getcwd(), candidate)
+    resolved = os.path.join(base, candidate)
     return os.path.exists(resolved) or os.path.isdir(os.path.dirname(resolved))
 
 
-def guarded(path):
-    if not looks_like_path(path):
+def guarded(path, base):
+    if not looks_like_path(path, base):
         return None
-    root = project_root(path)
+    root = project_root(path, base)
     if root is None:
         return None
     if os.path.exists(os.path.join(root, ".no-worktree")):
         return None
     if os.path.basename(path) == ".no-worktree":
         return None
-    abs_path = os.path.realpath(os.path.join(os.getcwd(), os.path.expanduser(path)))
+    abs_path = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
     if subprocess.run(["git", "-C", root, "check-ignore", "-q", "--", abs_path],
                       capture_output=True).returncode == 0:
         return None
@@ -133,44 +143,111 @@ def mask_quoted(command):
     return "".join(out)
 
 
-def write_targets(command):
-    """Every path the command would write to, best effort.
+ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
+VAR_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+STATEMENT_SEP = re.compile(r"\n|;|&&|\|\||\||&")
 
-    The command is split into statements first: shlex drops newlines, so a single
-    token list runs a `rm` argument scan straight through into the next line and
-    turns whatever follows into a filename.
+
+def expand(value, env):
+    """Expand $NAME and ${NAME} from variables set earlier in the command.
+
+    Returns None when anything is left that only the shell could resolve
+    (an unknown variable, a command substitution).
     """
-    out = []
-    for m in re.finditer(r"(?<![0-9<>])>>?\s*([^\s;|&()<>]+)", mask_quoted(command)):
-        out.append(m.group(1))
+    value = VAR_REF.sub(lambda m: env.get(m.group(1) or m.group(2), "\0"), value)
+    if "\0" in value or "$" in value or "`" in value:
+        return None
+    return os.path.expanduser(value)
 
-    for statement in re.split(r"\n|;|&&|\|\||\||&", command):
-        statement = statement.strip()
+
+def resolve_dir(arg, cwd, env):
+    """The directory `cd arg` lands in, or None when it cannot be known."""
+    target = expand(arg, env)
+    if target is None:
+        return None
+    if os.path.isabs(target):
+        return os.path.normpath(target)
+    if cwd is None:
+        return None
+    return os.path.normpath(os.path.join(cwd, target))
+
+
+def statements(command):
+    """Each statement as (raw text, quote-masked text), split outside quotes."""
+    masked = mask_quoted(command)
+    if len(masked) != len(command):
+        masked = command
+    start = 0
+    for m in STATEMENT_SEP.finditer(masked):
+        yield command[start:m.start()], masked[start:m.start()]
+        start = m.end()
+    yield command[start:], masked[start:]
+
+
+def write_targets(command):
+    """Every path the command would write to, with the directory it resolves in.
+
+    Best effort, as (target, base) pairs. The command is walked statement by
+    statement: shlex drops newlines, so a single token list runs a `rm` argument
+    scan straight through into the next line and turns whatever follows into a
+    filename. The walk follows `cd` and `NAME=value` assignments, so a relative
+    write after `cd <worktree>` resolves inside the worktree instead of the
+    session's start folder. When a directory cannot be known (an unknown
+    variable, a command substitution) the base falls back to the session's
+    folder, which keeps the guard on the strict side.
+    """
+    out, env = [], {}
+    start_dir = os.getcwd()
+    cwd = start_dir
+    for raw, masked in statements(command):
+        statement = raw.strip()
         if not statement:
             continue
         try:
             words = shlex.split(statement, comments=False)
         except ValueError:
             words = statement.split()
+        base = cwd or start_dir
+
+        if words and all(ASSIGNMENT.match(w) for w in words):
+            for w in words:
+                name, value = ASSIGNMENT.match(w).groups()
+                expanded = expand(value, env)
+                if expanded is None:
+                    env.pop(name, None)
+                else:
+                    env[name] = expanded
+            continue
+        if words and words[0] == "cd":
+            cwd = resolve_dir(words[1] if len(words) > 1 else "~", cwd, env)
+            continue
+        if len(words) > 2 and words[0] == "git" and words[1] == "-C":
+            base = resolve_dir(words[2], cwd, env) or start_dir
+
+        for m in re.finditer(r"(?<![0-9<>])>>?\s*([^\s;|&()<>]+)", masked):
+            out.append((m.group(1), base))
+
         opt_writer = any(os.path.basename(w) in OPT_WRITERS for w in words)
         for i, tok in enumerate(words):
-            base = os.path.basename(tok)
+            base_name = os.path.basename(tok)
+            if i and os.path.basename(words[i - 1]) in SUBCOMMAND_HOSTS:
+                continue
             own = words[i + 1:]
             bare = [w for w in own if not w.startswith("-")]
-            if base == "tee":
-                out.extend(bare)
-            elif base == "sed" and any(w.startswith("-i") for w in own[:3]):
+            if base_name == "tee":
+                out.extend((w, base) for w in bare)
+            elif base_name == "sed" and any(w.startswith("-i") for w in own[:3]):
                 # The first bare argument is the sed script, not a file, unless
                 # the script came in through -e/-f.
                 scripted = any(w.startswith(("-e", "-f")) for w in own)
-                out.extend(bare if scripted else bare[1:])
-            elif base in WRITE_FIRST:
-                out.extend(bare)
-            elif base in DEST_LAST:
+                out.extend((w, base) for w in (bare if scripted else bare[1:]))
+            elif base_name in WRITE_FIRST:
+                out.extend((w, base) for w in bare)
+            elif base_name in DEST_LAST:
                 if len(bare) >= 2:
-                    out.append(bare[-1])
+                    out.append((bare[-1], base))
             elif tok in WRITE_OPTS and own and opt_writer:
-                out.append(own[0])
+                out.append((own[0], base))
     return out
 
 
@@ -182,11 +259,11 @@ def main():
         print("DEPLOY")
         return 0
 
-    for target in write_targets(command):
+    for target, base in write_targets(command):
         target = target.strip("\"'")
-        if not target or target.startswith("-"):
+        if not target or target.startswith("-") or REDIRECT_FRAGMENT.match(target):
             continue
-        hit = guarded(target)
+        hit = guarded(target, base)
         if hit:
             print("WRITE")
             print(hit[0])
