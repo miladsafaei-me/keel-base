@@ -49,7 +49,7 @@ ZIP_VERSION = re.compile(r"-(\d+(?:\.\d+)*)\.zip$")
 MOBILE = brand.MOBILE_REPO
 
 # "<Title> \u2014 <about>" per family, in brand.json order.
-FAMILY_TITLE = {f: "%s \u2014 %s" % (v["title"], v["about"]) for f, v in brand.FAMILIES.items()}
+FAMILY_TITLE = {f: "%s: %s" % (v["title"], v["about"]) for f, v in brand.FAMILIES.items()}
 
 RETIRED = brand.VERSIONS_NOTE
 

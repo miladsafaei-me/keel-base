@@ -61,6 +61,7 @@ TOOLS="$HERE"
 # drifting and opening a SECOND AMO listing instead of updating the first.
 # Arguments still override, for a one-off.
 GECKO_ID="${2:-}"
+case "$GECKO_ID" in --*) echo "build-firefox.sh: '$GECKO_ID' is not a gecko id (this script takes no flags in that place; it always rebuilds)" >&2; exit 2 ;; esac
 GECKO_DOMAIN="$(python3 "$TOOLS/brand.py" get gecko_id_domain)"
 [ -n "$GECKO_ID" ] || GECKO_ID="$(python3 "$TOOLS/listing.py" firefox "$SLUG" id "${SLUG}@${GECKO_DOMAIN}")"
 LOGO="$(python3 "$TOOLS/brand.py" get logo_file)"
