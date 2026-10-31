@@ -209,7 +209,7 @@ def render(builds, notes):
         "|---|---|",
     ]
     for family in layout.FAMILIES:
-        lines.append("| `%s/` | %s |" % (family, (lambda t: t[0].upper() + t[1:])(FAMILY_TITLE[family].split(" \u2014 ", 1)[1])))
+        lines.append("| `%s/` | %s |" % (family, (lambda t: t[0].upper() + t[1:])(FAMILY_TITLE[family].split(": ", 1)[1])))
     lines += [
         "",
         "`tools/` links to the build scripts and checkers every site's extension repo shares",
