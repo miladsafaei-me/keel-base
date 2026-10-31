@@ -244,7 +244,7 @@ def render(builds, notes):
         lines += ["", "## Notes", ""]
         for slug in slugs:
             for n in notes.get(slug, []):
-                lines.append("- **`%s`** \u2014 %s" % (slug, n))
+                lines.append("- **`%s`** - %s" % (slug, n))
     lines.append("")
     return "\n".join(lines)
 
