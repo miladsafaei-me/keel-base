@@ -237,7 +237,7 @@ def render(builds, notes):
             cells = []
             for b in layout.BROWSERS:
                 info = builds.get((b, slug))
-                cells.append("`%s`" % info["version"] if info else "\u2014")
+                cells.append("`%s`" % info["version"] if info else "-")
             lines.append("| %s | `%s/%s/` | %s |" % (names[0], family, slug, " | ".join(cells)))
     slugs = [s for _f, s in layout.products()]
     if any(notes.get(s) for s in slugs):
