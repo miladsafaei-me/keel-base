@@ -18,6 +18,8 @@ Writes, under <family>/<slug>/:
   play/icon-512.png             the Google Play store icon
 
 Usage: sync-from-site.py <slug> [--ref origin/main] [--check]
+$KEEL_SITE_REF, when set, replaces origin/main as the default ref (a site branch not yet shipped; check.py and
+build.sh then read it too).
 --check exits non-zero when the files on disk differ from what the site would give.
 """
 import argparse
@@ -282,7 +284,7 @@ def outputs(slug, ref):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("slug")
-    ap.add_argument("--ref", default="origin/main")
+    ap.add_argument("--ref", default=os.environ.get("KEEL_SITE_REF", "origin/main"))
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
     files, mdir = outputs(args.slug, args.ref)

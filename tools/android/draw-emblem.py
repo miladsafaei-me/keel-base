@@ -48,7 +48,7 @@ PROMPT = (
 def site_logo(brand, m):
     """The site logo as PNG bytes; with emblem_box (fractions of the logo image), only the emblem above the wordmark."""
     site = mobile.expand(brand["site_repo"])
-    raw = subprocess.run(["git", "-C", site, "show", "origin/main:" + m["site"]["logo"]], capture_output=True, check=True).stdout
+    raw = subprocess.run(["git", "-C", site, "show", os.environ.get("KEEL_SITE_REF", "origin/main") + ":" + m["site"]["logo"]], capture_output=True, check=True).stdout
     box = m["site"].get("emblem_box")
     if not box:
         return raw, PROMPT
