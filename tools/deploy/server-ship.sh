@@ -48,8 +48,12 @@ git -C "$build_dir" clean -ffdxq
 # never grind the same disk at once. The lock is held for the build ONLY: the
 # project's own deploy script takes the same lock itself, and flock is not
 # reentrant, so holding it across that call would deadlock.
-lock=()
-[ -n "$HOST_LOCK" ] && lock=(flock -o -w 3600 "$HOST_LOCK")
+#
+# Every host serializes builds, set or not (2026-11-05): with no lock, six projects
+# built at once on 169.58.161.255, its RAM ran out (no swap, load 90+) and every live
+# site on it timed out for minutes. A project that sets HOST_LOCK shares that lock with
+# its deploy script; the rest share this default, held for the build alone.
+lock=(flock -o -w 3600 "${HOST_LOCK:-/tmp/keel-host-build.lock}")
 
 # RELEASE_VERSION is passed to every build: a Dockerfile that declares the ARG
 # (prop-firm-review bakes it into its hashed-static manifest) gets the commit,

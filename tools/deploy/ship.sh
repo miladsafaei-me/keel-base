@@ -129,7 +129,14 @@ echo "[ship] re-attach if this connection drops: ssh $(whoami)@$(hostname -I | a
 
 tail -n +1 -F "$log" 2>/dev/null &
 tailer=$!
-while [ "$(systemctl --user show -p ActiveState --value "$unit" 2>/dev/null)" = "active" ]; do
+# Wait for the unit's own exit code. Under memory pressure the state query can come
+# back empty, and treating that as "finished" printed FAILED for deploys that went on
+# to finish green (2026-11-05). Stop waiting only when the unit is really gone
+# (inactive or failed) and still no exit code appears a little later.
+while [ ! -s "$rc_file" ]; do
+    case "$(systemctl --user show -p ActiveState --value "$unit" 2>/dev/null)" in
+        inactive|failed) sleep 5; [ -s "$rc_file" ] || break ;;
+    esac
     sleep 5
 done
 sleep 1
