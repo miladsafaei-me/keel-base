@@ -39,8 +39,7 @@ branches() { git -C "$1" for-each-ref --format='x' 'refs/heads/wt/*' 2>/dev/null
 trees()    { keel_wt_list_secondary "$1" | grep -c . ; }
 
 total_b=0 total_t=0
-for repo in "$KEEL_WT_WORKSPACE"/*/; do
-  repo="${repo%/}"
+while IFS= read -r repo; do
   [ -e "$repo/.git" ] || continue
   keel_wt_load_conf "$repo"
   timeout 30 git -C "$repo" fetch --quiet --prune origin 2>/dev/null
@@ -53,5 +52,5 @@ for repo in "$KEEL_WT_WORKSPACE"/*/; do
     printf '%-24s branches %3d -> %-3d (-%d)   worktrees %2d -> %-2d (-%d)\n' \
       "$(basename "$repo")" "$b0" "$b1" "$db" "$t0" "$t1" "$dt"
   fi
-done
+done < <(keel_wt_all_repos)
 echo "swept $total_b landed wt/* branches and $total_t collected worktrees"

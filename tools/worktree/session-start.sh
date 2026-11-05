@@ -34,12 +34,11 @@ esac
 # fetch here: it stays fast, and skipping it only makes cleanup more cautious.
 sweep_all() {
   local repo
-  for repo in "$KEEL_WT_WORKSPACE"/*/; do
-    repo="${repo%/}"
+  while IFS= read -r repo; do
     [ -e "$repo/.git" ] || continue
     keel_wt_load_conf "$repo"
     keel_wt_sweep "$repo" "$(keel_wt_path "$repo" "$sid")"
-  done
+  done < <(keel_wt_all_repos)
 }
 sweep_all 2>/dev/null
 

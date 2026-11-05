@@ -36,6 +36,12 @@ check WRITE "new file in a shared tree"             "echo x > $W/martiland/brand
 
 check WRITE "quoted decoy does not hide a real write" "echo \"a > b\" > $W/revenika/README.md"
 
+# A repo nested one level inside a plain folder is a project too.
+if [ -e "$W/miladsafaei.me/miladsafaei-site/.git" ]; then
+  check WRITE "write into a nested project"           "echo x > $W/miladsafaei.me/miladsafaei-site/README.md"
+  check CLEAN "write into the plain parent folder"    "echo x > $W/miladsafaei.me/notes.txt"
+fi
+
 check CLEAN "read-only cat of a shared tree"        "cat $W/revenika/README.md"
 check CLEAN "ASCII arrow inside a quoted echo"      "echo \"   -> wt exit 0\""
 check CLEAN "ASCII arrow in single quotes"          "echo 'deploy -> done'"

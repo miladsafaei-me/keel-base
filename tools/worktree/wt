@@ -79,11 +79,10 @@ cmd_ls() {
   echo "session $SID   workspace $KEEL_WT_WORKSPACE"
   echo "  ( * = this session   +N = commits not yet on main   ~N = uncommitted files )"
   local repo
-  for repo in "$KEEL_WT_WORKSPACE"/*/; do
-    repo="${repo%/}"
+  while IFS= read -r repo; do
     [ -e "$repo/.git" ] || continue
     report_project "$repo"
-  done
+  done < <(keel_wt_all_repos)
 }
 
 cmd_status() {
@@ -320,12 +319,11 @@ cmd_on() {
 cmd_sweep() {
   need_sid
   local repo
-  for repo in "$KEEL_WT_WORKSPACE"/*/; do
-    repo="${repo%/}"
+  while IFS= read -r repo; do
     [ -e "$repo/.git" ] || continue
     keel_wt_load_conf "$repo"
     KEEL_WT_MAX_AGE_MIN="${KEEL_WT_MAX_AGE_MIN:-0}" keel_wt_sweep "$repo" "$(keel_wt_path "$repo" "$SID")"
-  done
+  done < <(keel_wt_all_repos)
   echo "wt: swept shipped worktrees and landed wt/* branches."
   cmd_ls
 }

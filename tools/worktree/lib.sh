@@ -35,11 +35,13 @@ keel_wt_sid_from_payload() {
   printf '%s' "${sid:0:8}"
 }
 
-# Repo root of the top-level project that owns an absolute path, or nothing.
+# Repo root of the project that owns an absolute path, or nothing. A project
+# is a repo directly under the workspace, or one level down inside a plain
+# folder that is not a repo itself (~/www/miladsafaei.me/miladsafaei-site).
 # A path inside .worktrees/ or a legacy .<slug>-worktrees/ resolves to nothing
 # on purpose: those are already isolated checkouts, never the shared tree.
 keel_wt_project_root() {
-  local p rest top
+  local p rest top second
   p="$(realpath -m -- "${1:-}" 2>/dev/null)" || return 1
   case "$p" in
     "$KEEL_WT_WORKSPACE"/*) ;;
@@ -48,17 +50,51 @@ keel_wt_project_root() {
   rest="${p#"$KEEL_WT_WORKSPACE"/}"
   top="${rest%%/*}"
   [ -n "$top" ] || return 1
-  [ -e "$KEEL_WT_WORKSPACE/$top/.git" ] || return 1
-  printf '%s' "$KEEL_WT_WORKSPACE/$top"
+  case "$top" in .*) return 1 ;; esac
+  if [ -e "$KEEL_WT_WORKSPACE/$top/.git" ]; then
+    printf '%s' "$KEEL_WT_WORKSPACE/$top"; return 0
+  fi
+  [ "$rest" != "$top" ] || return 1
+  rest="${rest#"$top"/}"
+  second="${rest%%/*}"
+  [ -n "$second" ] || return 1
+  [ -e "$KEEL_WT_WORKSPACE/$top/$second/.git" ] || return 1
+  printf '%s' "$KEEL_WT_WORKSPACE/$top/$second"
 }
 
-# Accepts a project name, a repo path or any path inside a repo.
+# Every project repo in the workspace, one path per line: top-level repos,
+# then repos nested one level inside plain folders.
+keel_wt_all_repos() {
+  local d n
+  for d in "$KEEL_WT_WORKSPACE"/*/; do
+    d="${d%/}"
+    if [ -e "$d/.git" ]; then
+      printf '%s\n' "$d"
+    else
+      for n in "$d"/*/; do
+        n="${n%/}"
+        [ -e "$n/.git" ] && printf '%s\n' "$n"
+      done
+    fi
+  done
+}
+
+# Accepts a project name, a repo path or any path inside a repo. A name is
+# looked up at the top level first, then one level down.
 keel_wt_resolve_repo() {
-  local arg="${1:-}"
+  local arg="${1:-}" n
   [ -n "$arg" ] || return 1
   if [ -e "$KEEL_WT_WORKSPACE/$arg/.git" ]; then
     printf '%s' "$KEEL_WT_WORKSPACE/$arg"; return 0
   fi
+  case "$arg" in
+    */*) ;;
+    *) for n in "$KEEL_WT_WORKSPACE"/*/"$arg"; do
+         if [ -e "$n/.git" ] && [ ! -e "$(dirname "$n")/.git" ]; then
+           printf '%s' "$n"; return 0
+         fi
+       done ;;
+  esac
   keel_wt_project_root "$arg"
 }
 

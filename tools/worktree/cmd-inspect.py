@@ -65,15 +65,27 @@ def strip_heredocs(command):
 
 
 def project_root(path, base):
-    """Repo root of the top-level project owning a path, else None."""
+    """Repo root of the project owning a path, else None.
+
+    A project is a repo directly under the workspace, or one level down inside
+    a plain folder that is not a repo itself (lib.sh keel_wt_project_root).
+    """
     p = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
     if not p.startswith(WORKSPACE + os.sep):
         return None
-    top = p[len(WORKSPACE) + 1:].split(os.sep)[0]
-    root = os.path.join(WORKSPACE, top)
-    if not top or not os.path.exists(os.path.join(root, ".git")):
+    parts = p[len(WORKSPACE) + 1:].split(os.sep)
+    top = parts[0]
+    if not top or top.startswith("."):
         return None
-    return root
+    root = os.path.join(WORKSPACE, top)
+    if os.path.exists(os.path.join(root, ".git")):
+        return root
+    if len(parts) < 2 or not parts[1]:
+        return None
+    nested = os.path.join(root, parts[1])
+    if os.path.exists(os.path.join(nested, ".git")):
+        return nested
+    return None
 
 
 def looks_like_path(candidate, base):
