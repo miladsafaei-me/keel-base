@@ -180,6 +180,8 @@ def main():
                     ctx.add_init_script("""(() => {
                         const s = %s;
                         try { if (s && !localStorage.getItem('sa-store')) localStorage.setItem('sa-store', JSON.stringify(s)); } catch (e) {}
+                        // The theme under test is the system's (?system=): a shell whose own default is light or dark follows it here.
+                        try { if (!localStorage.getItem('sa-theme-mode')) localStorage.setItem('sa-theme-mode', JSON.stringify('system')); } catch (e) {}
                         window.SignalAndroid = { theme() {}, open() {}, version() { return %s; } };
                         document.addEventListener('DOMContentLoaded', () => window.signalShell && window.signalShell.insets(%s));
                     })();""" % (json.dumps(store), json.dumps(m["version_name"]), json.dumps(insets)))
