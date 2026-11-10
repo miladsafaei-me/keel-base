@@ -6,6 +6,11 @@ its site, its colours, its partner link, its upload key's location and the other
 its users. The process that uses them is keel-kit's `methodology/signal-android-standard.md`, run by the
 `keel-kit:signal-android` skill.
 
+## Offline apps
+
+Apps that ship their whole web app inside the APK and need no site (the studio's electrical calculator, Faramarz)
+use the Gradle library in `offline-host/` instead of `host/`. Its README says how an app includes it.
+
 ## What an app is
 
 One activity (`host/`) hosts the site's own app in a WebView. The site's markup, stylesheet and scripts are copied into
