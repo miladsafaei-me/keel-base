@@ -119,8 +119,20 @@ import json, sys, collections
 src, dst, gecko_id = sys.argv[1], sys.argv[2], sys.argv[3]
 m = json.load(open(src), object_pairs_hook=collections.OrderedDict)
 
+# Firefox has no importScripts in an event page, so every file the Chrome worker
+# imports (config.js, and a worker-side broker link such as a member's API link)
+# is listed before background.js, in the worker's own import order.
+import os, re
+_bg = open(os.path.join(os.path.dirname(src), m["background"]["service_worker"]), encoding="utf-8").read()
+_imports = []
+for _call in re.findall(r"""importScripts\s*\(([^)]*)\)""", _bg):
+    for _name in re.findall(r"""["']([^"']+)["']""", _call):
+        if _name not in _imports:
+            _imports.append(_name)
+if "config.js" not in _imports:
+    _imports.insert(0, "config.js")
 m["background"] = collections.OrderedDict(
-    scripts=["firefox-shim.js", "config.js", "background.js"]
+    scripts=["firefox-shim.js"] + _imports + ["background.js"]
 )
 
 # Firefox needs the websocket scheme spelled out. In a match pattern the "*"
