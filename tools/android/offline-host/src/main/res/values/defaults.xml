@@ -5,4 +5,12 @@
     <color name="surface_dark">#000000</color>
     <color name="surface">@color/surface_light</color>
     <string name="pro_product_id" translatable="false"></string>
+
+    <!--
+      Opt-in features (README.md). Both stay false unless the app overrides them, and the app's own
+      manifest then declares the permissions (and the reminder receiver) they need.
+    -->
+    <bool name="keel_mic">false</bool>
+    <bool name="keel_reminders">false</bool>
+    <string name="keel_reminder_channel">Daily reminder</string>
 </resources>

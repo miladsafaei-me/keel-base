@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
+import org.json.JSONObject
 import java.io.File
 
 /** What the web app may ask of the device, as window.NativeApp. Every call arrives off the main thread. */
@@ -54,4 +55,39 @@ class Bridge(private val activity: OfflineWebActivity) {
             activity.startActivity(Intent.createChooser(send, safe))
         }
     }
+
+    /** Which opt-in features this app turned on (resource bools keel_mic, keel_reminders); mail always works. */
+    @JavascriptInterface
+    fun capabilities(): String = JSONObject()
+        .put("mic", activity.resources.getBoolean(R.bool.keel_mic))
+        .put("reminders", Reminders.enabled(activity))
+        .put("mail", true)
+        .toString()
+
+    /** Opens the mail app on a prepared message; the page hears appShell.mailResult({ok}). */
+    @JavascriptInterface
+    fun mail(to: String, subject: String, body: String) = activity.runOnUiThread { activity.sendMail(to, subject, body) }
+
+    /** {on, hour, minute, permission}: the daily reminder as the device holds it. */
+    @JavascriptInterface
+    fun reminderState(): String = Reminders.stateJson(activity)
+
+    /** {on, hour, minute, title, text}; the page hears appShell.reminderResult({on, permission}). */
+    @JavascriptInterface
+    fun setReminder(json: String) {
+        val o = try { JSONObject(json) } catch (_: Exception) { return }
+        activity.runOnUiThread {
+            activity.setReminder(
+                o.optBoolean("on", false),
+                o.optInt("hour", Reminders.DEFAULT_HOUR),
+                o.optInt("minute", 0),
+                o.optString("title", ""),
+                o.optString("text", ""),
+            )
+        }
+    }
+
+    /** The day's goal is met: today's reminder stays quiet. */
+    @JavascriptInterface
+    fun reminderDoneToday() = activity.runOnUiThread { Reminders.markDoneToday(activity) }
 }
