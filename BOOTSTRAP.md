@@ -23,8 +23,9 @@ no role in a live project.
 ## 2. Secrets & environment
 
 - [ ] `cp .env.example .env`, set a real `DJANGO_SECRET_KEY` and DB password.
-- [ ] Add GitHub Actions secrets for deploy: `DEPLOY_HOST`, `DEPLOY_USER`,
-  `DEPLOY_SSH_KEY`, `DEPLOY_PATH` (`gh secret set ...`).
+- [ ] No GitHub Actions deploy secrets are needed (since 2026-09-23 a deploy is
+  `wt deploy <project>` over SSH from the workstation). The prod host, SSH key and
+  repo path go in `deploy/ship.conf` instead (section 6).
 
 ## 3. Identity (SiteProfile)
 
