@@ -2,6 +2,7 @@ package keel.offlinehost
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
@@ -63,6 +64,13 @@ class Bridge(private val activity: OfflineWebActivity) {
         .put("reminders", Reminders.enabled(activity))
         .put("mail", true)
         .toString()
+
+    /** Opens this app's page in the phone's settings, where a refused permission (microphone) is turned back on. */
+    @JavascriptInterface
+    fun openAppSettings() = activity.runOnUiThread {
+        val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", activity.packageName, null))
+        activity.startActivity(details)
+    }
 
     /** Opens the mail app on a prepared message; the page hears appShell.mailResult({ok}). */
     @JavascriptInterface

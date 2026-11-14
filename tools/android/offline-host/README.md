@@ -6,14 +6,14 @@ WebView. This library is everything around it that is the same for every such ap
 | File | What it does |
 |---|---|
 | `OfflineWebActivity.kt` | Serves the bundled `web/` at `https://appassets.androidplatform.net/app/`, edge-to-edge bars, insets and the system theme pushed to the page, Back offered to the page first, outside links in a Custom Tab, in-app review |
-| `Bridge.kt` | `window.NativeApp`: theme, version, entitlement, purchase, restore, review, open, share text, share file, capabilities, mail, reminder state and settings |
+| `Bridge.kt` | `window.NativeApp`: theme, version, entitlement, purchase, restore, review, open, share text, share file, capabilities, mail, reminder state and settings, the app's page in the phone's settings |
 | `Billing.kt` | Play Billing for one Pro product: query on connect and resume, acknowledge, cached state so Pro works offline. A blank product id means the app sells nothing yet |
 | `Entitlement.kt` | The entitlement rules as plain values, unit-tested in `src/test` |
 | `Reminders.kt` | The opt-in daily reminder: its settings, `nextTrigger` (pure, unit-tested in `src/test`) and an inexact, Doze-safe `AlarmManager.setAndAllowWhileIdle` alarm |
 | `ReminderReceiver.kt` | Posts the reminder and reschedules it after a reboot, an app update, or a clock or zone change |
 
 The page side talks back through `window.appShell`: `insets(obj)`, `system("dark"|"light")`, `back()` returning
-true when the page handled it, `entitlement(obj)`, `purchaseResult(obj)`, `mailResult({ok})`, `reminderResult({on, permission})`.
+true when the page handled it, `entitlement(obj)`, `purchaseResult(obj)`, `mailResult({ok})`, `reminderResult({on, permission})`, and `resumed()` each time the app comes back to the foreground.
 
 Users: `~/products/rovinstudio/electrical-calculator`, `~/products/rovinstudio/persian-language-app` (Faramarz).
 The site-backed signal apps use `../host` instead.
@@ -71,6 +71,10 @@ permission stay denied. The app adds:
 <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 <uses-feature android:name="android.hardware.microphone" android:required="false" />
 ```
+
+Android stops showing the permission dialog after two refusals. `NativeApp.openAppSettings()` opens the app's page in
+the phone's settings, where the learner turns the microphone on by hand; `appShell.resumed()` fires on the way back,
+so the page can try again at once.
 
 ### Daily reminder (`keel_reminders`)
 

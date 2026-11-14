@@ -162,6 +162,8 @@ open class OfflineWebActivity : ComponentActivity() {
         Reminders.opened(this)
         // Restore is automatic: every return to the app re-reads purchases.
         if (::billing.isInitialized) billing.refresh()
+        // Back from the phone's settings (or anywhere): the page may check a permission again.
+        js("window.appShell && window.appShell.resumed && window.appShell.resumed()")
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
