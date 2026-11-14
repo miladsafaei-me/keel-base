@@ -169,7 +169,9 @@ def detect(chrome_dir):
     THEME[0] = theme_key.group(1) if theme_key else "atb-theme"
     global LICENCE_KEY
     LICENCE_KEY = (brand_app(chrome_dir).get("key_prefix") or "ATB-") + "TESTTESTAB"
-    prefix = re.search(r'msg\.type === "([A-Z]+)_GET_SIGNAL"', background).group(1)
+    # A member whose app reads in the page (no signal request) names only its licence message (2026-11-14,
+    # CryptoZella Signal Bot), so the prefix is read off either.
+    prefix = re.search(r'msg\.type === "([A-Z]+)_(?:GET_SIGNAL|CHECK_LICENSE)"', background).group(1)
     site = re.search(r'var SITE = "(https?://[^"]+)"', config).group(1)
     win = re.search(r"WINDOW:\s*\{\s*width:\s*(\d+),\s*height:\s*(\d+)", config)
     return store_key, prefix, site, (int(win.group(1)), int(win.group(2)))
