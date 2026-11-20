@@ -25,8 +25,13 @@ class Bridge(private val activity: OfflineWebActivity) {
     @JavascriptInterface
     fun refresh() = activity.runOnUiThread { activity.billing.refresh() }
 
+    /** One-time product: the argument is ignored. Subscription: the base plan id to buy (`monthly`, `yearly`). */
     @JavascriptInterface
-    fun purchase(productId: String) = activity.runOnUiThread { activity.billing.purchase(activity) }
+    fun purchase(plan: String) = activity.runOnUiThread { activity.billing.purchase(activity, plan.ifBlank { null }) }
+
+    /** Play's own page for this app's subscription, where the user changes plan, fixes payment or cancels. */
+    @JavascriptInterface
+    fun manageSubscription() = activity.runOnUiThread { activity.manageSubscription() }
 
     @JavascriptInterface
     fun restore() = activity.runOnUiThread { activity.billing.refresh() }

@@ -6,9 +6,10 @@ WebView. This library is everything around it that is the same for every such ap
 | File | What it does |
 |---|---|
 | `OfflineWebActivity.kt` | Serves the bundled `web/` at `https://appassets.androidplatform.net/app/`, edge-to-edge bars, insets and the system theme pushed to the page, Back offered to the page first, outside links in a Custom Tab, in-app review |
-| `Bridge.kt` | `window.NativeApp`: theme, version, entitlement, purchase, restore, review, open, share text, share file, capabilities, mail, reminder state and settings, the app's page in the phone's settings |
-| `Billing.kt` | Play Billing for one Pro product: query on connect and resume, acknowledge, cached state so Pro works offline. A blank product id means the app sells nothing yet |
-| `Entitlement.kt` | The entitlement rules as plain values, unit-tested in `src/test` |
+| `Bridge.kt` | `window.NativeApp`: theme, version, entitlement, purchase, restore, manage subscription, review, open, share text, share file, capabilities, mail, reminder state and settings, the app's page in the phone's settings |
+| `Billing.kt` | Play Billing glue for one Pro product, a one-time item or a subscription: Play's client behind the small `StoreClient` interface, and the cache in SharedPreferences |
+| `BillingCore.kt` | Every billing rule as plain logic: query on connect and resume, acknowledge, cached state so Pro works offline, the purchase flow. A blank product id means the app sells nothing yet. Unit-tested against a fake Play in `src/test` |
+| `Entitlement.kt` | The entitlement states and rules as plain values, unit-tested in `src/test` |
 | `Reminders.kt` | The opt-in daily reminder: its settings, `nextTrigger` (pure, unit-tested in `src/test`) and an inexact, Doze-safe `AlarmManager.setAndAllowWhileIdle` alarm |
 | `ReminderReceiver.kt` | Posts the reminder and reschedules it after a reboot, an app update, or a clock or zone change |
 
@@ -36,11 +37,31 @@ class MainActivity : keel.offlinehost.OfflineWebActivity()
 ```
 
 The app overrides these resources: colours `surface_light`, `surface_dark`, `surface` (and `values-night/surface`),
-string `pro_product_id`. It keeps its own manifest application element (icon, label, `allowBackup`, the backup rules
+strings `pro_product_id` and `pro_product_type` (see Selling Pro). It keeps its own manifest application element (icon, label, `allowBackup`, the backup rules
 in this library's `res/xml`), its splash theme and its launcher icon. Build output lands in the app's
 `android/build/offline-host/`, so two apps never share build state.
 
 Tests: `./gradlew :offline-host:testDebugUnitTest` from either app.
+
+## Selling Pro
+
+One product per app, named by the string `pro_product_id` (blank: the app sells nothing and Play is never asked).
+The string `pro_product_type` says what it is:
+
+- `inapp` (default): a one-time item. The page hears `{state, price}`; `NativeApp.purchase(anything)` buys it.
+- `subs`: a subscription with base plans (for example `monthly` and `yearly`, set in Play Console). The page hears
+  `{state, subscription: true, renewing, lapsed, plans: [{id, price, period, micros, currency}]}`. Prices and periods
+  come from Play for the user's country and are never cached, so an offline page has no plans to show.
+  `NativeApp.purchase(planId)` buys one base plan; intro offers are not sold.
+
+`state` is `unknown`, `none`, `pending` or `active`. Active covers a running plan, the grace period after a failed
+renewal, and a cancelled plan still paid until its end (then `renewing` is false). Play stops returning a plan that
+expired, is on account hold or is paused: the state is `none`, and `lapsed` is true when this install had Pro before.
+A failed query keeps the cached state, so Pro works offline. Restore is automatic: every start and every resume
+query Play again (a reinstall too); `NativeApp.restore()` runs the same query at once. Every purchase flow ends in
+`appShell.purchaseResult({result})` with `ok`, `pending`, `owned`, `cancelled`, `error` or `unavailable`.
+`NativeApp.manageSubscription()` opens Play's subscription page for the product, where the user changes plan,
+fixes a payment or cancels.
 
 ## Opt-in features
 

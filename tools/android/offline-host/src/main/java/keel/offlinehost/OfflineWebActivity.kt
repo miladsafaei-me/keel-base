@@ -79,7 +79,7 @@ open class OfflineWebActivity : ComponentActivity() {
         splash.setKeepOnScreenCondition { !drawn }
         applyTheme(systemDark())
 
-        billing = Billing(this, getString(R.string.pro_product_id),
+        billing = Billing(this, getString(R.string.pro_product_id), getString(R.string.pro_product_type),
             onChange = { json -> runOnUiThread { js("window.appShell && window.appShell.entitlement($json)") } },
             onPurchaseResult = { json -> runOnUiThread { js("window.appShell && window.appShell.purchaseResult($json)") } })
 
@@ -214,6 +214,24 @@ open class OfflineWebActivity : ComponentActivity() {
         val manager = ReviewManagerFactory.create(this)
         manager.requestReviewFlow().addOnCompleteListener { task ->
             if (task.isSuccessful) manager.launchReviewFlow(this, task.result)
+        }
+    }
+
+    /**
+     * Play's subscription page for this app's Pro product, opened in the Play Store app (a plain
+     * VIEW intent, not a Custom Tab, so Play handles it). Without Play the tap does nothing.
+     */
+    fun manageSubscription() {
+        val product = getString(R.string.pro_product_id)
+        val url = Uri.parse("https://play.google.com/store/account/subscriptions")
+            .buildUpon()
+            .apply { if (product.isNotBlank()) appendQueryParameter("sku", product) }
+            .appendQueryParameter("package", packageName)
+            .build()
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, url))
+        } catch (_: ActivityNotFoundException) {
+            // No app on the device opens Play links.
         }
     }
 

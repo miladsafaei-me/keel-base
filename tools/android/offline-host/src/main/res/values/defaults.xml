@@ -5,6 +5,8 @@
     <color name="surface_dark">#000000</color>
     <color name="surface">@color/surface_light</color>
     <string name="pro_product_id" translatable="false"></string>
+    <!-- inapp: a one-time Pro item; subs: a subscription whose base plans the page buys by id. -->
+    <string name="pro_product_type" translatable="false">inapp</string>
 
     <!--
       Opt-in features (README.md). Both stay false unless the app overrides them, and the app's own
